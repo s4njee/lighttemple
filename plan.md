@@ -1,0 +1,241 @@
+# Light Temple: Plan
+
+An experimental, research-oriented gallery of **practical WebGPU lighting and shadow effects** for building aesthetic websites. Every experiment is a live, tweakable page with notes on how it works, what it costs, and when to reach for it.
+
+This document is the roadmap. It is organised as **epics → stories**, each story with acceptance criteria. Status markers:
+
+- `[x]` done · `[~]` in progress / partial · `[ ]` not started
+- Size: **S** (≤ ½ day) · **M** (1–2 days) · **L** (3–5 days) · **XL** (needs splitting before starting)
+
+---
+
+## 1. Goals & non-goals
+
+**Goals**
+
+1. **Practical first.** Prefer techniques that ship on real websites: they run at 60 fps on a 2020 integrated GPU at 1080p, degrade gracefully on phones, and don't need a 50 MB asset pipeline.
+2. **Aesthetic.** Every experiment should look good by default, with art direction and not just a debug scene, because the point is to inspire site design.
+3. **Explain.** Each experiment carries "how it works", its cost, its knobs, and its failure modes. Debug views (shadow masks, depth, normals, SDFs) are first-class.
+4. **Reusable.** Techniques graduate from experiment code into small shared modules (`src/gpu`, `src/shaders`) that could later be extracted into an embeddable package.
+5. **Raw WebGPU.** No engine dependency. Understanding the GPU work is the research. Keep runtime dependencies to a bare minimum (currently only `wgpu-matrix`).
+
+**Non-goals (for now)**
+
+- A general-purpose engine or scene graph.
+- WebGL fallbacks for every experiment. A static poster/video fallback is enough (see E8-S6).
+- Photoreal offline-quality GI. We care about believable and fast.
+
+## 2. Technical decisions
+
+| Area | Decision | Why |
+| --- | --- | --- |
+| Build | Vite + TypeScript (strict), static output, relative `base` | Zero-config dev server, `?raw` WGSL imports, deployable to any static host / sub-path. |
+| Routing | Hash routes: `#/` and `#/x/<slug>` | Fully static hosting, no server rewrites. |
+| Shaders | Plain `.wgsl` files composed by string concatenation (`wgsl(...)`) | Readable error reports, no custom preprocessor to maintain. |
+| Uniforms | `UniformBlock` declares fields once in TS and generates the matching WGSL `struct` | Eliminates hand-maintained byte offsets, the #1 source of WebGPU bugs. |
+| Colour | Linear-light shading → tonemap (None/ACES/AgX) → manual sRGB encode + triangular dither | Canvas formats are not sRGB; dither kills banding in the long, smooth gradients lighting produces. |
+| Experiments | Each one is a lazy-loaded module exporting an `ExperimentFactory` | Index stays tiny; experiments are isolated and disposable. |
+| UI | Tiny in-house params panel (`src/ui/params.ts`) | No dependency, styled to match, schema → live values object. |
+| Testing | Headless Chromium + SwiftShader WebGPU smoke test (`npm run smoke`) | Catches WGSL/validation errors and blank frames in CI without a GPU. |
+
+**Browser targets:** Chrome/Edge 113+, Safari 26+, Firefox 141+ (Windows; other platforms as they ship). A clear message is shown where WebGPU is unavailable.
+
+**Performance budget (per experiment, default settings):** ≤ 8 ms GPU at 1920×1080 on an integrated GPU (Intel Iris Xe / Apple M1 class); ≤ 16 ms at the capped pixel ratio on a mid-range phone. Every experiment must expose a quality knob that can meet the phone budget.
+
+## 3. Experiment definition of done
+
+An experiment is **stable** (vs. **prototype**) when it has:
+
+- [ ] Good-looking defaults and respects `prefers-reduced-motion`.
+- [ ] Parameters for every interesting knob, with hints on non-obvious ones.
+- [ ] At least one debug view (mask / depth / normals / buffers).
+- [ ] "How it works" notes covering technique, cost, and failure modes.
+- [ ] Passes `npm run smoke` with no console errors.
+- [ ] Meets the performance budget at default settings (measured with GPU timestamps once E9-S3 lands).
+- [ ] A real thumbnail (E9-S1).
+- [ ] Disposes all GPU resources (switching experiments 20× shows no growth in GPU memory).
+
+---
+
+## 4. Epics
+
+| ID | Epic | Theme |
+| --- | --- | --- |
+| E0 | Foundation & infrastructure | Gallery shell, GPU core, tooling |
+| E1 | Rendering toolkit | Shared building blocks: HDR, post chain, materials, assets |
+| E2 | Interface lighting (2D / 2.5D) | Cursor lights, lit UI surfaces, the "website-native" effects |
+| E3 | Real-time shadows | Every practical shadow technique, compared |
+| E4 | Global illumination & ambient | AO, bounce light, area lights, environment lighting |
+| E5 | Volumetrics & atmosphere | God rays, fog, caustics, sky |
+| E6 | Stylised lighting | Toon, halftone, dither, hatching, gradient-mapped light |
+| E7 | Many lights | Compute-driven clustered lighting, particles as lights |
+| E8 | Web integration | DOM-driven lights/occluders, scroll, embeds, fallbacks |
+| E9 | Gallery UX & documentation | Thumbnails, compare mode, sharing, perf HUD |
+| E10 | Quality, performance & CI | Automated checks, device tiers, deployment |
+
+---
+
+### E0: Foundation & infrastructure
+
+> Make adding a new experiment a 15-minute job, and make failures loud and legible.
+
+- [x] **E0-S1: Project scaffold** (S). Vite + strict TS, `@webgpu/types`, `?raw` WGSL imports, relative base path.
+  *AC:* `npm run dev`, `npm run build`, `npm run typecheck` work on a clean checkout.
+- [x] **E0-S2: GPU context** (S). `src/gpu/context.ts`: single shared adapter/device, optional features (`float32-filterable`, `timestamp-query`, `rg11b10ufloat-renderable`, …) requested when available, capability report, device-lost handling, typed `WebGpuUnavailableError`.
+  *AC:* Unsupported browsers get a human-readable explanation; device loss shows an in-page error.
+- [x] **E0-S3: Surface & resize** (S). `src/gpu/surface.ts`: device-pixel-exact `ResizeObserver`, pixel-ratio cap (default 2), render-scale multiplier.
+  *AC:* No blurry canvas on HiDPI; changing render scale live works.
+- [x] **E0-S4: Experiment contract & host** (M). `ExperimentFactory → { frame, resize?, dispose }`; host owns loop, dt clamp, pause when off-screen, pointer, params, and errors.
+  *AC:* Shader compile errors render in-page with a code excerpt; validation errors during init surface via error scopes.
+- [x] **E0-S5: Typed uniforms** (S). `UniformBlock` computes WGSL alignment and emits the struct.
+  *AC:* Two experiments use it with mixed `f32/u32/vec*/mat4x4f` fields with no manual offsets.
+- [x] **E0-S6: Shared WGSL chunks** (S). `common.wgsl` (tonemappers, sRGB, IGN/hash noise, dithered display encode), `fullscreen.wgsl`, `shadow.wgsl`.
+- [x] **E0-S7: Params panel** (S). Number/bool/color/select controls from a schema, reset, buttons.
+- [x] **E0-S8: Gallery index + hash router** (S). Lazy-loaded registry, cards, experiment page with panel and notes.
+- [x] **E0-S9: Headless smoke test** (M). `npm run smoke`: build, serve, render every experiment in SwiftShader WebGPU, fail on errors, save screenshots to `.smoke/`.
+- [x] **E0-S10: First two experiments** (M). `pointer-light-2d` (E2) and `shadow-map-pcf` (E3) as end-to-end proofs of the foundation.
+- [ ] **E0-S11: Experiment template generator** (S). `npm run new <slug>` scaffolds `index.ts`, `shader.wgsl` and a registry entry.
+- [ ] **E0-S12: Param state in URL** (S). Serialise non-default params into the hash (`#/x/slug?intensity=2`) so states are shareable. *(Also enables E9-S4.)*
+
+### E1: Rendering toolkit
+
+> Shared building blocks that later epics lean on. Build each one *when the first experiment needs it*, not ahead of time.
+
+- [ ] **E1-S1: HDR render target + post chain** (M). `rgba16float` scene target, a `PostChain` of fullscreen passes, final tonemap/encode pass. Move tonemapping out of individual experiments.
+  *AC:* Two experiments share it; exposure/tonemap controls are host-level.
+- [ ] **E1-S2: Bloom** (M). Dual-filter (Kawase / CoD-style 13-tap) downsample/upsample chain with threshold-less energy-conserving mix.
+  *AC:* ≤ 1 ms at 1080p on integrated GPU; no fireflies with emissive point lights.
+- [ ] **E1-S3: Temporal accumulation / TAA-lite** (L). Jittered projection, history reprojection with neighbourhood clamp. Lets Poisson/stochastic techniques (E3, E4, E5) run with few samples.
+- [ ] **E1-S4: PBR material model** (M). GGX specular + Lambert/Burley diffuse, metal/rough, shared `brdf.wgsl`. Replace Blinn-Phong where it matters.
+- [ ] **E1-S5: Image-based lighting** (M). Equirect HDR → prefiltered cubemap (compute), SH9 irradiance, split-sum BRDF LUT.
+- [ ] **E1-S6: glTF loader (minimal)** (M). Positions/normals/UVs/indices + base colour/metal-rough textures. Enough to drop in a hero object.
+- [ ] **E1-S7: Render-target pool** (S). Size-keyed texture cache with automatic resize; replaces the per-experiment `ensureTargets` code.
+- [ ] **E1-S8: Pipeline/shader cache & hot reload** (S). Reuse modules across experiments; Vite HMR for `.wgsl` re-creates pipelines without a page reload.
+- [ ] **E1-S9: SDF toolkit** (M). Shared 2D/3D SDF primitives and operators (`sdf2d.wgsl`, `sdf3d.wgsl`), plus MSDF text rendering so headings can cast shadows (feeds E2-S3, E8-S2).
+
+### E2: Interface lighting (2D / 2.5D)
+
+> The most directly "website-native" category: lights that react to the cursor, scroll and UI, lighting flat or nearly flat content.
+
+- [~] **E2-S1: Pointer light with SDF soft shadows** (M). *Prototype done:* `pointer-light-2d`. Extruded SDF shapes with bevel normals, ray-marched soft and finite shadows, two lights, debug views.
+  *Remaining:* fix faint dashed artefacts along bevel rims at grazing angles; cap steps by shadow length for perf; mobile-friendly defaults.
+- [ ] **E2-S2: Normal-mapped surfaces** (M). Cursor light over embossed paper, brushed metal and leather textures (tangent-space normal + roughness maps), with parallax occlusion mapping for depth.
+  *AC:* A "business card" demo that looks physically embossed under a moving light.
+- [ ] **E2-S3: Lit typography** (M). MSDF headline extruded into a height field. Cursor light rakes across letters with soft self-shadowing. Depends on E1-S9.
+- [ ] **E2-S4: Holographic / foil cards** (M). Pointer- or gyro-driven specular sheen with thin-film interference and anisotropic highlights. Classic "trading card" effect, done physically.
+- [ ] **E2-S5: Glass panels** (M). Frosted-glass UI cards with refraction of the lit background, edge highlights, a dispersion fringe, and light-catching bevels.
+- [ ] **E2-S6: 2D radiance cascades GI** (L). Emissive shapes light a 2D scene with correct soft shadows and colour bleeding, the modern way (Sannikov's radiance cascades). Paint lights with the cursor.
+  *AC:* ≥ 60 fps at 1080p on integrated GPU with 4–5 cascades.
+- [ ] **E2-S7: Long-shadow / flat-design lighting** (S). Infinite directional "long shadows" for icons/logos via SDF sweep, matching flat UI aesthetics.
+- [ ] **E2-S8: Neon & emissive signage** (S). Emissive SDF strokes with bloom, flicker and wall spill lighting. Depends on E1-S2.
+
+### E3: Real-time shadows
+
+> A side-by-side reference of practical shadow techniques, each with debug views and cost numbers.
+
+- [~] **E3-S1: Directional shadow map + filters** (M). *Prototype done:* `shadow-map-pcf`. Hard (HW 2×2), PCF grid, rotated Poisson, PCSS; depth + normal-offset bias; shadow-map overlay; radial background fade.
+  *Remaining:* texel-snapped light frustum (no shimmering when the light orbits); tight frustum fitting to the camera; split-screen compare (E9-S2).
+- [ ] **E3-S2: Variance / exponential shadow maps (VSM, EVSM)** (M). Filterable moments with a separable blur and light-bleeding reduction. Uses `float32-filterable` when present, `rgba16float` fallback.
+  *AC:* Toggle against PCSS showing cost vs. quality and the light-bleeding failure case.
+- [ ] **E3-S3: Cascaded shadow maps** (L). 3–4 cascades, practical split scheme, cascade blending, texel snapping, cascade debug colours. Large terrain-ish scene.
+- [ ] **E3-S4: Omnidirectional point-light shadows** (M). Cube shadow maps (or dual-paraboloid comparison) for a lantern/candle inside a room.
+- [ ] **E3-S5: Spot light shadows + cookies/gobos** (S). Perspective shadow map with a projected texture (window blinds, leaves), a staple of moody hero sections.
+- [ ] **E3-S6: Screen-space contact shadows** (S). Short screen-space ray march along the light direction to recover contact detail lost to shadow-map resolution.
+- [ ] **E3-S7: SDF ray-marched soft shadows (3D)** (M). Analytic and baked-SDF soft shadows for primitive scenes. Compare to PCSS.
+- [ ] **E3-S8: Transparent-canvas shadow catcher** (M). Render *only* shadows (and AO) onto a transparent canvas (`alphaMode: 'premultiplied'`) so a 3D object floats over arbitrary HTML with a believable ground shadow.
+  *AC:* Works over a CSS gradient and over text, with correct premultiplied alpha.
+- [ ] **E3-S9: Coloured / translucent shadows** (M). Stained glass and tinted acrylic: a coloured transmittance map alongside depth, plus a stochastic transparency comparison.
+- [ ] **E3-S10: Blob & baked shadows** (S). The cheap end: projected blob shadows and baked AO/shadow textures, as the low-tier fallback for E10-S4.
+- [ ] **E3-S11: Ray-traced shadows (stretch)** (XL). Compute-shader BVH ray queries for a small scene. Research only; compare against PCSS.
+
+### E4: Global illumination & ambient
+
+- [ ] **E4-S1: SSAO → GTAO** (M). Ground-truth AO with bent normals, half-res + bilateral upsample, temporal accumulation via E1-S3.
+- [ ] **E4-S2: Analytic area lights (LTC)** (M). Rect and disc area lights with linearly transformed cosines: soft-box studio lighting for product shots.
+- [ ] **E4-S3: Irradiance probes / SH lighting** (M). Baked (or compute-baked at load) SH probe grid for soft bounce light in a small room.
+- [ ] **E4-S4: Reflective shadow maps** (M). One-bounce indirect from the sun via RSM sampling; cheap colour bleeding.
+- [ ] **E4-S5: Screen-space GI / SSIL** (L). Visibility-bitmask SSIL or similar, half-res with temporal filtering.
+- [ ] **E4-S6: 3D radiance cascades / voxel GI (stretch)** (XL). Research spike; split before starting.
+
+### E5: Volumetrics & atmosphere
+
+- [ ] **E5-S1: Screen-space god rays** (S). Radial blur of an occlusion mask from the light's screen position. The cheap classic.
+- [ ] **E5-S2: Ray-marched volumetric light** (M). March the shadow map in view space with Henyey-Greenstein phase, blue-noise jitter, and temporal reprojection. Shafts through window blinds (pairs with E3-S5).
+- [ ] **E5-S3: Froxel volumetric fog** (L). Compute-built froxel grid with per-froxel lighting and integration; supports multiple lights and local fog volumes.
+- [ ] **E5-S4: Caustics** (M). Water caustics projected onto a floor from an animated normal field (light-space photon splat or analytic), plus a glass-object caustic.
+- [ ] **E5-S5: Dust motes & light-catching particles** (S). GPU particles lit only inside light shafts, the "sunbeam through a window" mood.
+- [ ] **E5-S6: Atmospheric sky** (M). Hillaire-style LUT sky (transmittance + multi-scattering) for sunrise/sunset hero backgrounds driven by scroll.
+
+### E6: Stylised lighting
+
+- [ ] **E6-S1: Toon / cel shading** (S). Banded diffuse with a ramp texture, rim light, inverted-hull or screen-space outlines, stylised shadow edges.
+- [ ] **E6-S2: Halftone & dithered shadows** (S). Print-style halftone dots, ordered/blue-noise dither, and 1-bit "Obra Dinn" lighting driven by real shadow maps.
+- [ ] **E6-S3: Hatching** (M). Tonal art maps for pencil/ink hatching that follow lighting.
+- [ ] **E6-S4: Gradient-mapped light** (S). Map luminance through art-directed gradients (duotone/tritone brand palettes). Practical for on-brand sites.
+- [ ] **E6-S5: Matcap & fake lighting** (S). Matcaps and hemisphere tricks as near-zero-cost lighting for low-tier devices.
+- [ ] **E6-S6: Painterly / Kuwahara post** (M). Anisotropic Kuwahara filter over a lit scene for a painted look.
+
+### E7: Many lights
+
+- [ ] **E7-S1: Clustered forward lighting** (L). Compute-shader light binning into view-space clusters; 1k+ point lights at 60 fps. Cluster heatmap debug view.
+- [ ] **E7-S2: Fireflies / lights-as-particles** (M). GPU particle system where each particle is a light, on top of E7-S1.
+- [ ] **E7-S3: Light-linked text / UI glow** (S). Hundreds of tiny lights tracing a logo outline that light the surrounding scene.
+- [ ] **E7-S4: Deferred vs. forward comparison** (M). Same scene, G-buffer deferred path vs. clustered forward, with timings.
+
+### E8: Web integration
+
+> Techniques that make the effects work *on real pages*. This is what separates this gallery from a generic graphics demo reel.
+
+- [ ] **E8-S1: DOM elements as occluders** (M). Read `getBoundingClientRect()` of real HTML cards/buttons, upload them as SDF rounded-rects, and cast soft light/shadows *from the DOM* onto a WebGPU background. Scroll-synced.
+  *AC:* Shadows track elements during scroll and resize with no visible lag (rAF-synchronised).
+- [ ] **E8-S2: DOM text as occluders** (M). Rasterise headings to an SDF (canvas 2D → JFA in compute) so real, selectable text casts shadows.
+- [ ] **E8-S3: Scroll-driven lighting** (S). Map scroll progress to sun position, time of day, light intensity. Demo: a long-form article that "sets" as you read.
+- [ ] **E8-S4: Embeddable component** (M). `<lt-light-surface>` web component wrapping an experiment with attributes for key params; usable outside the gallery.
+- [ ] **E8-S5: Transparent overlays & blending with CSS** (S). Premultiplied-alpha canvases composited over HTML, `mix-blend-mode` interplay, pointer-events passthrough.
+- [ ] **E8-S6: Graceful fallbacks** (S). Poster image / short video when WebGPU is missing, and when `prefers-reduced-motion` or `Save-Data` is set.
+- [ ] **E8-S7: Lifecycle & battery** (S). Pause on `visibilitychange`/off-screen (done in host), throttle to 30 fps when idle, release GPU memory when hidden for a long time.
+- [ ] **E8-S8: Multiple canvases, one device** (M). Several lit regions on one page sharing a device and pacing, without janking scroll.
+
+### E9: Gallery UX & documentation
+
+- [ ] **E9-S1: Real thumbnails** (S). Generate PNG/AVIF thumbnails from the smoke-test screenshots; replace CSS gradient placeholders. Optional hover-to-play short loops.
+- [ ] **E9-S2: Compare mode** (M). Split-screen slider comparing two parameter presets (e.g. PCF vs. PCSS) in the same experiment.
+- [ ] **E9-S3: GPU timing HUD** (M). Per-pass GPU timings via `timestamp-query` when available; CPU frame time otherwise.
+- [ ] **E9-S4: Presets** (S). Named art-directed presets per experiment ("Golden hour", "Studio", "Noir"), shareable via E0-S12.
+- [ ] **E9-S5: Filtering & search** (S). Filter the index by epic/tag/cost tier.
+- [ ] **E9-S6: Long-form write-ups** (M per article). For the best techniques: diagrams, references, and "use it on your site" guidance.
+- [ ] **E9-S7: Keyboard & screen-reader pass** (S). Focus states, labelled controls, canvas descriptions, panel collapsible on mobile.
+- [ ] **E9-S8: Light theme / art direction pass** (S). Consistent visual identity across experiments.
+
+### E10: Quality, performance & CI
+
+- [ ] **E10-S1: CI workflow** (S). GitHub Actions: typecheck, build, smoke test (SwiftShader); upload `.smoke/` screenshots as artefacts.
+- [ ] **E10-S2: Static deployment** (S). GitHub Pages (or Cloudflare Pages) on push to main; preview deploys for PRs.
+- [ ] **E10-S3: Visual regression** (M). Deterministic frame mode (fixed time, fixed pointer) + image diff against approved baselines.
+- [ ] **E10-S4: Device tiers & adaptive quality** (M). Classify devices (adapter info + a short GPU timing probe) into tiers; auto-pick render scale/steps/map sizes; dynamic resolution if frame time exceeds budget.
+- [ ] **E10-S5: Resource leak check** (S). Smoke test cycles every experiment N times and asserts no growth in tracked GPU allocations.
+- [ ] **E10-S6: Lint/format** (S). ESLint + Prettier config, and a WGSL formatting convention.
+
+---
+
+## 5. Suggested sequencing
+
+1. **Milestone 1: Foundation** *(done)*. E0-S1…S10.
+2. **Milestone 2: Ship the gallery.** E10-S1, E10-S2, E9-S1, E0-S11, E0-S12. The site is public, tested and easy to extend.
+3. **Milestone 3: Web-native lighting.** E1-S1, E1-S2, E2-S2, E2-S4, E8-S1, E3-S8. These are the most immediately useful for real websites.
+4. **Milestone 4: Shadow reference.** E3-S1 (finish), E3-S2, E3-S3, E3-S5, E3-S6, E9-S2, E9-S3.
+5. **Milestone 5: Atmosphere & GI.** E1-S3, E5-S1, E5-S2, E4-S1, E4-S2, E2-S6.
+6. **Milestone 6: Style & scale.** E6-*, E7-S1, E7-S2, E8-S4.
+
+## 6. Open questions
+
+- Should stable techniques be extracted into a publishable package (`@lighttemple/*`) or stay as copy-paste reference code?
+- Do we want a WebGL2 fallback for the 2–3 most practical effects (E2-S1, E3-S8), or are posters enough?
+- Thumbnail strategy: static frames vs. short looping video (size budget)?
+
+## 7. Adding an experiment (current workflow)
+
+1. Create `src/experiments/<slug>/index.ts` exporting a default `ExperimentFactory` (see `pointer-light-2d` for a fullscreen-shader template, `shadow-map-pcf` for a 3D multi-pass template).
+2. Declare params with `ctx.params.add({...}, 'Group')`; declare uniforms with `new UniformBlock(device, 'Name', {...})` and splice `block.wgslStruct` into the shader.
+3. Register it in `src/gallery/registry.ts` with title, summary, epic, tags and notes.
+4. Run `npm run dev`, then `npm run smoke` before committing.
