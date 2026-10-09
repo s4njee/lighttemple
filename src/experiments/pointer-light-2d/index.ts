@@ -1,14 +1,24 @@
 import commonWgsl from '../../shaders/common.wgsl?raw';
 import fullscreenWgsl from '../../shaders/fullscreen.wgsl?raw';
+import sdfWgsl from '../../shaders/sdf.wgsl?raw';
 import { createShader, wgsl } from '../../gpu/shader';
 import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { UniformBlock } from '../../gpu/uniforms';
+import { TextSdfGenerator, type TextSdf } from '../../sdf/text-sdf';
 import { hexToLinear } from '../../ui/params';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 
 const create: ExperimentFactory = async (ctx) => {
   const { device, surface: canvas, params, pointer, reducedMotion } = ctx;
+  const content = params.add(
+    {
+      scene: { value: 1, options: { Headline: 1, Shapes: 0 } },
+      text: { value: 'Light Temple', type: 'text', maxLength: 40, hint: 'Rendered to a distance field at runtime, so any text or font works.' },
+      font: { value: 'serif', options: { Serif: 'serif', Sans: 'sans' } },
+    },
+    'Scene',
+  );
   const light = params.add(
     {
       intensity: { value: 1.6, min: 0, max: 6, step: 0.01 },
@@ -63,12 +73,16 @@ const create: ExperimentFactory = async (ctx) => {
     bevel: 'f32',
     steps: 'u32',
     debugView: 'u32',
+    sceneMode: 'u32',
+    textScale: 'f32',
+    textPad: 'f32',
+    textRect: 'vec4f',
   });
 
   const module = await createShader(
     device,
     'pointer-light-2d',
-    wgsl(commonWgsl, fullscreenWgsl, uniforms.wgslStruct, shaderWgsl),
+    wgsl(commonWgsl, fullscreenWgsl, sdfWgsl, uniforms.wgslStruct, shaderWgsl),
   );
 
   const pipeline = await device.createRenderPipelineAsync({
@@ -79,9 +93,42 @@ const create: ExperimentFactory = async (ctx) => {
     primitive: { topology: 'triangle-list' },
   });
 
-  const bindGroup = device.createBindGroup({
-    layout: pipeline.getBindGroupLayout(0),
-    entries: [{ binding: 0, resource: { buffer: uniforms.buffer } }],
+  // Headline: text -> SDF texture, regenerated (debounced) when the text or font changes.
+  const FONTS = {
+    serif: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
+    sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
+  } as const;
+  const textGen = new TextSdfGenerator(device);
+  const textSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+  let textSdf: TextSdf;
+  let bindGroup: GPUBindGroup;
+  let textKey = '';
+  let textRequest = 0;
+  const buildText = async () => {
+    const key = `${content.font}|${content.text}`;
+    if (key === textKey) return;
+    textKey = key;
+    const id = ++textRequest;
+    const sdf = await textGen.generate({ text: content.text.trim() || ' ', family: FONTS[content.font as keyof typeof FONTS], size: 160 });
+    if (id !== textRequest || disposed) return sdf.destroy();
+    const old = textSdf;
+    textSdf = sdf;
+    bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: uniforms.buffer } },
+        { binding: 1, resource: sdf.texture.createView() },
+        { binding: 2, resource: textSampler },
+      ],
+    });
+    old?.destroy();
+  };
+  let disposed = false;
+  await buildText();
+  let textTimer = 0;
+  params.onChange(() => {
+    clearTimeout(textTimer);
+    textTimer = window.setTimeout(() => void buildText(), 200);
   });
 
   let sceneTime = 0;
@@ -91,6 +138,9 @@ const create: ExperimentFactory = async (ctx) => {
   return {
     frame({ time, dt, size }) {
       const aspect = size.width / size.height;
+      // Fit the headline texture (glyphs + padding) to ~90% of the width, at most ~0.36 world units tall.
+      let textHalf = [0.9 * aspect, (0.9 * aspect * textSdf.height) / textSdf.width];
+      if (textHalf[1] > 0.36) textHalf = [(0.36 * textSdf.width) / textSdf.height, 0.36];
       if (surface.animate) sceneTime += dt;
 
       // Pointer uv -> world (y up, y in [-1,1]). Drift on a slow Lissajous when idle.
@@ -122,6 +172,10 @@ const create: ExperimentFactory = async (ctx) => {
         .set('shapeColor', [...hexToLinear(surface.shapes), surface.gloss])
         .set('shapeHeight', surface.shapeHeight)
         .set('bevel', surface.bevel)
+        .set('sceneMode', content.scene)
+        .set('textScale', (2 * textHalf[0]) / textSdf.width)
+        .set('textRect', [0, 0.02, textHalf[0], textHalf[1]])
+        .set('textPad', (textSdf.padding * 2 * textHalf[0]) / textSdf.width)
         .set('steps', debug.steps)
         .set('debugView', debug.view)
         .upload();
@@ -140,6 +194,9 @@ const create: ExperimentFactory = async (ctx) => {
       device.queue.submit([encoder.finish()]);
     },
     dispose() {
+      disposed = true;
+      clearTimeout(textTimer);
+      textSdf.destroy();
       post.destroy();
       uniforms.destroy();
     },

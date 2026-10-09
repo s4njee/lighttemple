@@ -58,7 +58,8 @@ fn light_space(world_pos: vec3f, n: vec3f, ndl: f32) -> vec3f {
 fn sample_shadow(lp: vec3f, frag: vec2f) -> f32 {
   if (!shadow_in_bounds(lp)) { return 1.0; }
   let texel = 1.0 / f32(textureDimensions(shadow_map).x);
-  let angle = ign(frag) * TAU;
+  // Rotating the noise per frame lets TAA integrate it into a smooth result.
+  let angle = ign(frag + frame.noiseOffset) * TAU;
   let world_to_uv = 1.0 / (2.0 * frame.shadowExtent);
   switch frame.shadowMode {
     case 0u: { return 1.0; }

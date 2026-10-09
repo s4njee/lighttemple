@@ -37,6 +37,42 @@ const LAYOUT: Record<WgslFieldType, [number, number]> = {
 
 export type FieldValue = number | ArrayLike<number>;
 
+interface StructLayout<S> {
+  fields: Record<keyof S, FieldInfo>;
+  byteSize: number;
+  wgslStruct: string;
+}
+
+function layoutStruct<S extends Record<string, WgslFieldType>>(name: string, schema: S): StructLayout<S> {
+  let offset = 0;
+  let maxAlign = 16; // uniform structs are 16-byte aligned
+  const fields = {} as Record<keyof S, FieldInfo>;
+  const decl: string[] = [];
+  for (const [key, type] of Object.entries(schema) as [keyof S & string, WgslFieldType][]) {
+    const [align, size] = LAYOUT[type];
+    maxAlign = Math.max(maxAlign, align);
+    offset = Math.ceil(offset / align) * align;
+    fields[key] = {
+      type,
+      offset: offset / 4,
+      count: size / 4,
+      kind: type.endsWith('u') || type === 'u32' ? 'u' : type === 'i32' ? 'i' : 'f',
+    };
+    decl.push(`  ${key}: ${type},`);
+    offset += size;
+  }
+  return {
+    fields,
+    byteSize: Math.max(16, Math.ceil(offset / maxAlign) * maxAlign),
+    wgslStruct: `struct ${name} {\n${decl.join('\n')}\n};`,
+  };
+}
+
+/** The WGSL `struct` for a schema, without allocating a buffer (for shared shader code). */
+export function uniformStruct(name: string, schema: Record<string, WgslFieldType>): string {
+  return layoutStruct(name, schema).wgslStruct;
+}
+
 export class UniformBlock<S extends Record<string, WgslFieldType>> {
   readonly buffer: GPUBuffer;
   readonly byteSize: number;
@@ -55,30 +91,14 @@ export class UniformBlock<S extends Record<string, WgslFieldType>> {
     readonly name: string,
     schema: S,
   ) {
-    let offset = 0;
-    let maxAlign = 16; // uniform structs are 16-byte aligned
-    const fields = {} as Record<keyof S, FieldInfo>;
-    const decl: string[] = [];
-    for (const [key, type] of Object.entries(schema) as [keyof S & string, WgslFieldType][]) {
-      const [align, size] = LAYOUT[type];
-      maxAlign = Math.max(maxAlign, align);
-      offset = Math.ceil(offset / align) * align;
-      fields[key] = {
-        type,
-        offset: offset / 4,
-        count: size / 4,
-        kind: type.endsWith('u') || type === 'u32' ? 'u' : type === 'i32' ? 'i' : 'f',
-      };
-      decl.push(`  ${key}: ${type},`);
-      offset += size;
-    }
-    this.byteSize = Math.max(16, Math.ceil(offset / maxAlign) * maxAlign);
-    this.fields = fields;
+    const layout = layoutStruct(name, schema);
+    this.byteSize = layout.byteSize;
+    this.fields = layout.fields;
+    this.wgslStruct = layout.wgslStruct;
     this.data = new ArrayBuffer(this.byteSize);
     this.f32 = new Float32Array(this.data);
     this.u32 = new Uint32Array(this.data);
     this.i32 = new Int32Array(this.data);
-    this.wgslStruct = `struct ${name} {\n${decl.join('\n')}\n};`;
     this.buffer = device.createBuffer({
       label: `uniforms:${name}`,
       size: this.byteSize,

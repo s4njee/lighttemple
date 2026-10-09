@@ -32,6 +32,13 @@ export interface ColorParam {
   label?: string;
   hint?: string;
 }
+export interface TextParam {
+  value: string;
+  type: 'text';
+  maxLength?: number;
+  label?: string;
+  hint?: string;
+}
 export interface SelectParam<T extends string | number = string | number> {
   value: T;
   options: Record<string, T>;
@@ -39,7 +46,7 @@ export interface SelectParam<T extends string | number = string | number> {
   hint?: string;
 }
 
-export type ParamDef = NumberParam | BooleanParam | ColorParam | SelectParam;
+export type ParamDef = NumberParam | BooleanParam | ColorParam | TextParam | SelectParam;
 export type ParamSchema = Record<string, ParamDef>;
 
 export type ParamValues<S extends ParamSchema> = {
@@ -47,7 +54,7 @@ export type ParamValues<S extends ParamSchema> = {
     ? number
     : S[K] extends BooleanParam
       ? boolean
-      : S[K] extends ColorParam
+      : S[K] extends ColorParam | TextParam
         ? string
         : S[K] extends SelectParam<infer T>
           ? T
@@ -74,6 +81,7 @@ interface Entry {
 function parseParam(def: ParamDef, raw: string): unknown {
   if ('options' in def) return Object.values(def.options).find((v) => String(v) === raw);
   if ('type' in def && def.type === 'color') return /^[0-9a-f]{6}$/i.test(raw) ? `#${raw.toLowerCase()}` : undefined;
+  if ('type' in def && def.type === 'text') return raw.slice(0, def.maxLength ?? 64);
   if (typeof def.value === 'boolean') return raw === '1' || raw === 'true' ? true : raw === '0' || raw === 'false' ? false : undefined;
   const d = def as NumberParam;
   const n = Number(raw);
@@ -154,6 +162,15 @@ export class ParamsPanel {
         input.type = 'color';
         input.addEventListener('input', () => commit(input.value));
         setUi = (v) => (input.value = String(v));
+        row.append(input);
+      } else if ('type' in def && def.type === 'text') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = def.maxLength ?? 64;
+        input.spellcheck = false;
+        input.addEventListener('input', () => commit(input.value));
+        setUi = (v) => (input.value = String(v));
+        row.classList.add('param-text');
         row.append(input);
       } else if (typeof def.value === 'boolean') {
         const input = document.createElement('input');

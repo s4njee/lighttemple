@@ -6,7 +6,7 @@
 import { getGpu, WebGpuUnavailableError } from '../gpu/context';
 import { ShaderCompileError, withErrorScope } from '../gpu/shader';
 import { Surface } from '../gpu/surface';
-import type { Experiment, ExperimentMeta } from '../experiments/types';
+import type { Experiment, ExperimentFactory, ExperimentMeta } from '../experiments/types';
 import { ParamsPanel } from '../ui/params';
 import { PointerTracker } from '../ui/pointer';
 import { FrameStats } from '../ui/stats';
@@ -16,6 +16,14 @@ import { experimentHash, replaceHash } from './route';
 import { reportStatus } from './status';
 
 const MAX_DT = 1 / 20;
+
+/** Factories delivered by hot module replacement (dev only), newest per slug. */
+const hotFactories = new Map<string, ExperimentFactory>();
+
+/** Registers a hot-swapped factory, used by every later mount of `slug`. */
+export function registerHotFactory(slug: string, factory: ExperimentFactory): void {
+  hotFactories.set(slug, factory);
+}
 
 export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initialParams = new URLSearchParams()): () => void {
   document.title = `${meta.title} · Light Temple`;
@@ -88,11 +96,11 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initial
     cleanups.push(() => stats.destroy());
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const mod = await meta.load();
+    const factory = hotFactories.get(meta.slug) ?? (await meta.load()).default;
     if (disposed) return;
 
     const experiment: Experiment = await withErrorScope(gpu.device, () =>
-      mod.default({
+      factory({
         gpu,
         device: gpu.device,
         surface,

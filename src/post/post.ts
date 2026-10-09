@@ -47,6 +47,11 @@ export interface PostRenderOptions {
    * dissolve into a flat page colour with no tonemapping mismatch. Default black.
    */
   background?: readonly [number, number, number];
+  /**
+   * Read from this HDR texture instead of the scene target (same size), e.g.
+   * the output of TemporalAA.resolve().
+   */
+  source?: GPUTexture;
 }
 
 export class PostProcess {
@@ -125,6 +130,7 @@ export class PostProcess {
     if (!scene) throw new Error('PostProcess.render() called before scene()');
     const s = this.settings;
     const raw = opts.raw ?? false;
+    const input = opts.source ?? scene.texture;
     const doBloom = !raw && s.bloom > 0;
 
     // Bloom pyramid: level i is (1/2)^(i+1) of full resolution.
@@ -153,7 +159,7 @@ export class PostProcess {
 
     if (levels.length > 0) {
       levels.forEach((dst, i) => {
-        const src = i === 0 ? scene.texture : levels[i - 1].texture;
+        const src = i === 0 ? input : levels[i - 1].texture;
         this.fullscreen(encoder, i === 0 ? this.pipelines.downKaris : this.pipelines.down, src, dst.view, 'clear');
       });
       for (let i = levels.length - 1; i > 0; i--) {
@@ -161,7 +167,7 @@ export class PostProcess {
       }
     }
 
-    this.fullscreen(encoder, this.pipelines.composite, scene.texture, output, 'clear', levels[0]?.texture ?? this.black);
+    this.fullscreen(encoder, this.pipelines.composite, input, output, 'clear', levels[0]?.texture ?? this.black);
   }
 
   private fullscreen(

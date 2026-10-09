@@ -290,7 +290,8 @@ h2 {
   text-align: right;
 }
 .param select,
-.param input[type='color'] {
+.param input[type='color'],
+.param input[type='text'] {
   grid-column: span 2;
 }
 .param-bool input {
@@ -300,6 +301,15 @@ h2 {
 .param input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
+}
+.param input[type='text'] {
+  min-width: 0;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+  font: inherit;
 }
 .param select {
   background: var(--bg-input);

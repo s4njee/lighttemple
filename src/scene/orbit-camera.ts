@@ -115,6 +115,14 @@ export class OrbitCamera {
     this.goal.distance = Math.min(this.maxDistance, Math.max(this.minDistance, this.goal.distance * factor));
   }
 
+  /** Re-frames the camera (animated, like user input). */
+  setView(v: { target?: [number, number, number]; distance?: number; yaw?: number; pitch?: number }): void {
+    if (v.target) vec3.set(...v.target, this.target);
+    if (v.distance !== undefined) this.goal.distance = Math.min(this.maxDistance, Math.max(this.minDistance, v.distance));
+    if (v.yaw !== undefined) this.goal.yaw = v.yaw;
+    if (v.pitch !== undefined) this.goal.pitch = v.pitch;
+  }
+
   get interacting(): boolean {
     return this.dragging !== null || this.pointers.size > 0;
   }

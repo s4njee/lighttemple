@@ -24,7 +24,7 @@ export const experiments: ExperimentMeta[] = [
     title: 'Pointer Light',
     summary: 'A cursor-following area light casting soft, finite shadows from extruded 2D shapes.',
     epic: 'ui-lighting',
-    tags: ['sdf', 'soft shadows', 'pointer', 'fullscreen'],
+    tags: ['sdf', 'soft shadows', 'pointer', 'text', 'fullscreen'],
     status: 'prototype',
     cardBackground:
       'radial-gradient(circle at 62% 38%, #ffe2bd 0%, #c9b9a5 22%, #6c625a 58%, #2a2623 100%)',
@@ -32,6 +32,7 @@ export const experiments: ExperimentMeta[] = [
       'The whole scene is one fullscreen fragment shader. Shapes are a 2D signed distance field (SDF), extruded to a fixed height with a smooth bevel, so every pixel knows its height and surface normal without any geometry.',
       'Shadows are ray-marched through the SDF toward each light. The tightest clearance-to-distance ratio along the ray gives a penumbra that widens with distance from the occluder, the classic Quilez soft-shadow trick. The ray also climbs toward the light, so once it clears the top of a shape it is no longer blocked. That is why shadows end, and why they lengthen as you lower the light.',
       'Lighting uses inverse-square falloff, regularised by the light radius, with Lambert diffuse and normalised Blinn-Phong. Output goes through AgX or ACES, then sRGB encoding with triangular dither so the long, smooth gradients do not band on 8-bit displays.',
+      'The headline is real text: Canvas 2D rasterises it in any CSS font, then a jump-flood compute pass turns the coverage mask into a signed distance field with sub-pixel edge seeds. The shapes come from the shared SDF toolkit. Edit the text in the panel and the field rebuilds in a few milliseconds.',
       'Cost: one fullscreen pass with steps × lights SDF evaluations per pixel. At 48 steps this is comfortable on integrated GPUs at 1080p. Lower the steps or render scale for mobile.',
     ],
     load: () => import('../experiments/pointer-light-2d'),
@@ -53,6 +54,22 @@ export const experiments: ExperimentMeta[] = [
       'A radial fade is applied after tonemapping so it matches the clear colour exactly, and the floor dissolves into the background with no visible edge. Useful when a 3D scene has to sit inside a flat-coloured page section.',
     ],
     load: () => import('../experiments/shadow-map-pcf'),
+  },
+  {
+    slug: 'studio-ibl',
+    title: 'Studio Lighting',
+    summary: 'A glTF product shot lit only by its environment, with a soft shadow catcher that melts into the page.',
+    epic: 'global-illumination',
+    tags: ['ibl', 'pbr', 'gltf', 'shadow catcher', 'hdr'],
+    status: 'prototype',
+    cardBackground: 'radial-gradient(ellipse at 50% 35%, #fff3e0 0%, #9c8b78 30%, #2b2622 70%, #141210 100%)',
+    notes: [
+      'Image-based lighting: the environment (a procedural studio with softboxes, a procedural sky, or a real HDRI) is baked once into a 512² cubemap with mips. From that come a GGX-prefiltered specular cube (one mip per roughness step, using filtered importance sampling so 96 samples per texel are enough), nine spherical-harmonic coefficients for diffuse irradiance (one compute workgroup), and the split-sum DFG lookup table.',
+      'Shading adds multiple-scattering energy compensation (Fdez-Agüera), so rough metals keep their brightness instead of going dark. Compare the rough end of the metal row in the material grid.',
+      'The floor is a shadow catcher: it renders nothing but darkness, blended over whatever is behind it, so it works on the environment and on a flat page colour. The soft shadow comes from the environment\'s dominant light, estimated from the SH band-1 vector, so rotating the environment swings the shadow. Contact occlusion comes from a depth map rendered looking up from under the floor: each texel stores how high the underside of the model is.',
+      'The lantern is a CC0 Khronos sample model (textures shrunk to 1K JPEG, about 1 MB). Drag your own .glb or equirectangular .hdr onto the canvas to try them. Bake cost is a one-off few milliseconds on a discrete GPU. Per frame it is one model pass plus two small depth passes.',
+    ],
+    load: () => import('../experiments/studio-ibl'),
   },
 ];
 

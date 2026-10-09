@@ -21,12 +21,28 @@ export function wgsl(...chunks: string[]): string {
   return chunks.join('\n\n');
 }
 
+/** Compiled modules per device, keyed by source. Experiments that share code
+ * (e.g. the post chain) compile it once per session, not once per mount. */
+const moduleCache = new WeakMap<GPUDevice, Map<string, Promise<GPUShaderModule>>>();
+
 /**
- * Creates a shader module and awaits its compilation info. Errors throw a
- * ShaderCompileError with a short code excerpt around each failing line;
- * warnings are logged.
+ * Creates (or reuses) a shader module and awaits its compilation info. Errors
+ * throw a ShaderCompileError with a short code excerpt around each failing
+ * line; warnings are logged.
  */
-export async function createShader(device: GPUDevice, label: string, code: string): Promise<GPUShaderModule> {
+export function createShader(device: GPUDevice, label: string, code: string): Promise<GPUShaderModule> {
+  let cache = moduleCache.get(device);
+  if (!cache) moduleCache.set(device, (cache = new Map()));
+  let pending = cache.get(code);
+  if (!pending) {
+    pending = compile(device, label, code);
+    cache.set(code, pending);
+    pending.catch(() => cache.delete(code)); // don't cache failures
+  }
+  return pending;
+}
+
+async function compile(device: GPUDevice, label: string, code: string): Promise<GPUShaderModule> {
   const module = device.createShaderModule({ label, code });
   const info = await module.getCompilationInfo();
   const errors = info.messages.filter((m) => m.type === 'error');

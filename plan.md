@@ -106,14 +106,15 @@ An experiment is **stable** (vs. **prototype**) when it has:
   *AC:* Both experiments use it, and neither does its own tonemapping anymore. ✔
 - [x] **E1-S2: Bloom** (M). Up to 6-level pyramid: 13-tap CoD:AW downsample (Karis average on the first level against fireflies), 3×3 tent upsample with additive blending, energy-conserving `mix` with no threshold.
   *Remaining:* measure the ≤ 1 ms @1080p budget once E9-S3 GPU timings exist.
-- [ ] **E1-S3: Temporal accumulation / TAA-lite** (L). Jittered projection, history reprojection with neighbourhood clamp. Lets Poisson/stochastic techniques (E3, E4, E5) run with few samples.
+- [x] **E1-S3: Temporal accumulation / TAA-lite** (L). `src/post/taa.ts`: Halton(2,3) clip-space jitter, depth-based reprojection (closest depth in 3×3), 9-tap Catmull-Rom history, YCoCg variance clipping, Karis luma-weighted blending, motion-adaptive feedback, `frameNoiseOffset` for per-frame noise rotation. `post.render({ source })` consumes the resolved image. `shadow-map-pcf` has an *Anti-aliasing* switch (MSAA 4× / TAA / Off); with TAA its Poisson/PCSS grain converges to a smooth result.
+  *Remaining:* no velocity buffer yet, so animated objects rely on the neighbourhood clip (fine for slow motion, ghosts on fast motion).
 - [x] **E1-S4: PBR material model** (M). `src/shaders/brdf.wgsl`: metal/roughness, GGX + height-correlated Smith + Schlick, Lambert diffuse weighted by (1−F)(1−metallic), and `brdf_ambient` using Karis' analytic split-sum fit so a hemisphere "environment" gives plausible reflections before IBL exists. `shadow-map-pcf` uses it (copper torus, steel pole).
   *Remaining:* `pointer-light-2d` still uses normalised Blinn-Phong (fine for its matte look); revisit with E2-S2.
-- [ ] **E1-S5: Image-based lighting** (M). Equirect HDR → prefiltered cubemap (compute), SH9 irradiance, split-sum BRDF LUT.
-- [ ] **E1-S6: glTF loader (minimal)** (M). Positions/normals/UVs/indices + base colour/metal-rough textures. Enough to drop in a hero object.
+- [x] **E1-S5: Image-based lighting** (M). `src/ibl/`: Radiance `.hdr` (RGBE, RLE) decoder + float16 upload; procedural *studio* (softboxes) and *sky* (sun + gradient) environments; bake to a 512² env cube with mips → GGX-prefiltered specular cube (7 roughness mips, filtered importance sampling) → SH9 irradiance (one compute workgroup, read back to estimate the dominant light direction) → split-sum DFG LUT. `ibl.wgsl` shading includes multiple-scattering energy compensation. Bind group 1 by convention. Rendered by fragment passes (one face/mip per pass) rather than compute, which keeps it on core-only formats.
+- [x] **E1-S6: glTF loader (minimal)** (M). `src/gltf/`: `.glb`/`.gltf` (data URIs or relative files), node hierarchies (matrix/TRS), triangle primitives with float or normalized-int attributes, generated normals when missing, metal/roughness materials with base colour, metal-rough, normal, occlusion and emissive textures (sRGB formats where required, mipmaps via `src/gpu/mipmaps.ts`), per-texture samplers, alpha MASK. Normal mapping uses supplied tangents, else a derivative-based cotangent frame. No skinning, morphs, animation or extensions (BLEND renders opaque).
 - [x] **E1-S7: Render-target pool** (S). `src/gpu/targets.ts`: `TargetPool.get(name, { size, format, scale?, sampleCount? })` recreates a target only when its description changes. Used by the post chain (scene + bloom levels) and the shadow experiment (MSAA colour/depth).
-- [~] **E1-S8: Pipeline/shader cache & hot reload** (S). *Partial:* editing a `.wgsl` file triggers a Vite full reload, and because params live in the URL (E0-S12) the experiment comes back in the same state. *Remaining:* in-place pipeline swap without a reload; share compiled modules (e.g. `post`) across experiment switches.
-- [ ] **E1-S9: SDF toolkit** (M). Shared 2D/3D SDF primitives and operators (`sdf2d.wgsl`, `sdf3d.wgsl`), plus MSDF text rendering so headings can cast shadows (feeds E2-S3, E8-S2).
+- [x] **E1-S8: Pipeline/shader cache & hot reload** (S). `createShader` caches compiled modules per device by source, so shared code (post, TAA, IBL bake) compiles once per session. A dev-only Vite plugin makes every `src/experiments/*/index.ts` self-accepting. Editing an experiment or any shader/module it imports remounts it *in place* (same device, same params, no page reload). Changes outside that boundary fall back to a full reload, which still restores state from the URL.
+- [x] **E1-S9: SDF toolkit** (M). `src/shaders/sdf.wgsl`: 2D (`sd_circle/box/round_box/segment/capsule/ring/equilateral_triangle`) and 3D (`sd_sphere3/box3/round_box3/torus3/capsule3/cylinder3/plane3`) primitives, `op_extrude`, and (smooth) boolean ops. **Text:** instead of MSDF (offline font/atlas toolchain), `src/sdf/text-sdf.ts` rasterises any CSS font with Canvas 2D and builds a signed distance field with a jump-flood compute pipeline seeded at *sub-pixel* edge positions. It's slightly rounder at extreme magnification, but works with page fonts and arbitrary runtime text, which is what E2-S3/E8-S2 need. `pointer-light-2d` gained a *Headline* scene and an editable text param (new `text` param type).
 
 ### E2: Interface lighting (2D / 2.5D)
 
@@ -123,7 +124,7 @@ An experiment is **stable** (vs. **prototype**) when it has:
   *Remaining:* fix faint dashed artefacts along bevel rims at grazing angles; cap steps by shadow length for perf; mobile-friendly defaults.
 - [ ] **E2-S2: Normal-mapped surfaces** (M). Cursor light over embossed paper, brushed metal and leather textures (tangent-space normal + roughness maps), with parallax occlusion mapping for depth.
   *AC:* A "business card" demo that looks physically embossed under a moving light.
-- [ ] **E2-S3: Lit typography** (M). MSDF headline extruded into a height field. Cursor light rakes across letters with soft self-shadowing. Depends on E1-S9.
+- [~] **E2-S3: Lit typography** (M). *Started:* `pointer-light-2d` → Scene: Headline extrudes runtime text (E1-S9) with bevels, soft self-shadowing and finite shadows. *Remaining:* a dedicated experiment with per-letter materials, layout from real DOM text, and a 3D extruded (`op_extrude`) variant.
 - [ ] **E2-S4: Holographic / foil cards** (M). Pointer- or gyro-driven specular sheen with thin-film interference and anisotropic highlights. Classic "trading card" effect, done physically.
 - [ ] **E2-S5: Glass panels** (M). Frosted-glass UI cards with refraction of the lit background, edge highlights, a dispersion fringe, and light-catching bevels.
 - [ ] **E2-S6: 2D radiance cascades GI** (L). Emissive shapes light a 2D scene with correct soft shadows and colour bleeding, the modern way (Sannikov's radiance cascades). Paint lights with the cursor.
@@ -144,7 +145,7 @@ An experiment is **stable** (vs. **prototype**) when it has:
 - [ ] **E3-S5: Spot light shadows + cookies/gobos** (S). Perspective shadow map with a projected texture (window blinds, leaves), a staple of moody hero sections.
 - [ ] **E3-S6: Screen-space contact shadows** (S). Short screen-space ray march along the light direction to recover contact detail lost to shadow-map resolution.
 - [ ] **E3-S7: SDF ray-marched soft shadows (3D)** (M). Analytic and baked-SDF soft shadows for primitive scenes. Compare to PCSS.
-- [ ] **E3-S8: Transparent-canvas shadow catcher** (M). Render *only* shadows (and AO) onto a transparent canvas (`alphaMode: 'premultiplied'`) so a 3D object floats over arbitrary HTML with a believable ground shadow.
+- [~] **E3-S8: Transparent-canvas shadow catcher** (M). *Started:* `studio-ibl` renders a ground that only darkens what is behind it (soft key shadow from the IBL's dominant direction + contact occlusion from an upward-looking depth map), composited over a page colour by the post chain. *Remaining:* a truly transparent canvas (`alphaMode: 'premultiplied'`) over live HTML.
   *AC:* Works over a CSS gradient and over text, with correct premultiplied alpha.
 - [ ] **E3-S9: Coloured / translucent shadows** (M). Stained glass and tinted acrylic: a coloured transmittance map alongside depth, plus a stochastic transparency comparison.
 - [ ] **E3-S10: Blob & baked shadows** (S). The cheap end: projected blob shadows and baked AO/shadow textures, as the low-tier fallback for E10-S4.
@@ -190,7 +191,7 @@ An experiment is **stable** (vs. **prototype**) when it has:
 
 - [ ] **E8-S1: DOM elements as occluders** (M). Read `getBoundingClientRect()` of real HTML cards/buttons, upload them as SDF rounded-rects, and cast soft light/shadows *from the DOM* onto a WebGPU background. Scroll-synced.
   *AC:* Shadows track elements during scroll and resize with no visible lag (rAF-synchronised).
-- [ ] **E8-S2: DOM text as occluders** (M). Rasterise headings to an SDF (canvas 2D → JFA in compute) so real, selectable text casts shadows.
+- [ ] **E8-S2: DOM text as occluders** (M). Read headings' text, font and rects from the DOM, build SDFs with `TextSdfGenerator` (E1-S9), and let real, selectable text cast shadows.
 - [ ] **E8-S3: Scroll-driven lighting** (S). Map scroll progress to sun position, time of day, light intensity. Demo: a long-form article that "sets" as you read.
 - [ ] **E8-S4: Embeddable component** (M). `<lt-light-surface>` web component wrapping an experiment with attributes for key params; usable outside the gallery.
 - [ ] **E8-S5: Transparent overlays & blending with CSS** (S). Premultiplied-alpha canvases composited over HTML, `mix-blend-mode` interplay, pointer-events passthrough.
@@ -222,11 +223,11 @@ An experiment is **stable** (vs. **prototype**) when it has:
 
 ## 5. Suggested sequencing
 
-1. **Milestone 1: Foundation** *(done)*. E0-S1…S12, plus E1-S1, S2, S4, S7.
-2. **Milestone 2: Ship the gallery.** E10-S1, E10-S2, E9-S1, E0-S11, E0-S12. The site is public, tested and easy to extend.
+1. **Milestone 1: Foundation** *(done)*. All of E0 and E1.
+2. **Milestone 2: Ship the gallery.** E10-S1, E10-S2, E9-S1. The site is public, tested and easy to extend.
 3. **Milestone 3: Web-native lighting.** E2-S2, E2-S4, E8-S1, E3-S8 (on top of the finished E1-S1/S2). These are the most immediately useful for real websites.
 4. **Milestone 4: Shadow reference.** E3-S1 (finish), E3-S2, E3-S3, E3-S5, E3-S6, E9-S2, E9-S3.
-5. **Milestone 5: Atmosphere & GI.** E1-S3, E5-S1, E5-S2, E4-S1, E4-S2, E2-S6.
+5. **Milestone 5: Atmosphere & GI.** E5-S1, E5-S2, E4-S1, E4-S2, E2-S6 (all can lean on E1-S3 TAA and E1-S5 IBL).
 6. **Milestone 6: Style & scale.** E6-*, E7-S1, E7-S2, E8-S4.
 
 ## 6. Open questions

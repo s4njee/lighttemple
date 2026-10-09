@@ -9,27 +9,31 @@
 //      while letting the ray rise over shapes so shadows have finite length,
 //   3. shade with inverse-square falloff and Lambert/Blinn-Phong.
 // Outputs linear HDR into the post chain's scene target.
-// Requires (prepended): common.wgsl, fullscreen.wgsl, the `Params` struct.
+// Requires (prepended): common.wgsl, fullscreen.wgsl, sdf.wgsl, the `Params` struct.
 // ---------------------------------------------------------------------------
 
 @group(0) @binding(0) var<uniform> u: Params;
 
-fn rot2(a: f32) -> mat2x2f {
-  let c = cos(a); let s = sin(a);
-  return mat2x2f(c, s, -s, c);
+@group(0) @binding(1) var text_sdf: texture_2d<f32>;
+@group(0) @binding(2) var text_sampler: sampler;
+
+// Headline text from a runtime-generated SDF texture (src/sdf/text-sdf.ts).
+// textRect = (centre.xy, half-size.zw) in world units; the texture stores
+// distance in texels, textScale converts to world units.
+fn sd_text(p: vec2f) -> f32 {
+  let rel = p - u.textRect.xy;
+  let half = u.textRect.zw;
+  let box = sd_box(rel, half);
+  let uv = clamp(vec2f(rel.x / half.x, -rel.y / half.y) * 0.5 + 0.5, vec2f(0.0), vec2f(1.0));
+  let d = textureSampleLevel(text_sdf, text_sampler, uv, 0.0).r * u.textScale;
+  // Outside the texture, combine two lower bounds (both safe for marching):
+  // the distance to the glyphs' own box (texture rect minus padding), which is
+  // tight far away, and the edge sample minus the distance travelled to it.
+  let glyph_box = sd_box(rel, max(half - vec2f(u.textPad), vec2f(1e-3)));
+  return select(d, max(glyph_box, d - box), box > 0.0);
 }
 
-fn sd_round_box(p: vec2f, half_size: vec2f, r: f32) -> f32 {
-  let q = abs(p) - half_size + r;
-  return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
-}
-
-fn sd_circle(p: vec2f, r: f32) -> f32 { return length(p) - r; }
-
-fn sd_ring(p: vec2f, r: f32, thickness: f32) -> f32 { return abs(length(p) - r) - thickness; }
-
-// Scene SDF in "world" units: y spans [-1, 1], x spans [-aspect, aspect].
-fn map(p: vec2f) -> f32 {
+fn map_shapes(p: vec2f) -> f32 {
   let t = u.sceneTime;
   var d = 1e9;
   // Tall card, gently swaying.
@@ -43,6 +47,12 @@ fn map(p: vec2f) -> f32 {
   // Ring.
   d = min(d, sd_ring(p - vec2f(-0.12, 0.55), 0.11, 0.025));
   return d;
+}
+
+// Scene SDF in "world" units: y spans [-1, 1], x spans [-aspect, aspect].
+fn map(p: vec2f) -> f32 {
+  if (u.sceneMode == 1u) { return sd_text(p); }
+  return map_shapes(p);
 }
 
 fn map_grad(p: vec2f) -> vec2f {

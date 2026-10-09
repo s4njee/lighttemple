@@ -7,13 +7,14 @@ import { MESH_VERTEX_LAYOUT, MESH_VERTEX_WGSL, box, plane, sphere, torus, upload
 import { createShader, wgsl } from '../../gpu/shader';
 import { TargetPool } from '../../gpu/targets';
 import { HDR_FORMAT, PostProcess } from '../../post/post';
+import { TemporalAA } from '../../post/taa';
 import { UniformBlock } from '../../gpu/uniforms';
 import { OrbitCamera } from '../../scene/orbit-camera';
 import { hexToLinear } from '../../ui/params';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 
-const SAMPLE_COUNT = 4;
+const MSAA_SAMPLES = 4;
 const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 const SHADOW_FORMAT: GPUTextureFormat = 'depth32float';
 /** Half-width of the light's orthographic frustum (world units); covers the props. */
@@ -60,6 +61,11 @@ const create: ExperimentFactory = async (ctx) => {
       sky: { value: '#a9bcd6', type: 'color' },
       ground: { value: '#6b5d52', type: 'color' },
       ambient: { value: 0.28, min: 0, max: 1.5, step: 0.01 },
+      antialiasing: {
+        value: 'msaa',
+        options: { 'MSAA 4×': 'msaa', TAA: 'taa', Off: 'off' },
+        hint: 'TAA also accumulates the per-pixel Poisson/PCSS noise over frames, so soft shadows come out smooth.',
+      },
       view: { value: 0, options: { Lit: 0, Visibility: 1, 'Light depth': 2 } },
       showMap: { value: false, label: 'Show shadow map' },
       animate: { value: !reducedMotion },
@@ -67,6 +73,7 @@ const create: ExperimentFactory = async (ctx) => {
     'Look & debug',
   );
   const post = await PostProcess.create(ctx, { bloom: 0.02, vignette: 0.12, grain: 0.02 });
+  const taa = await TemporalAA.create(device);
 
   // --- Scene ------------------------------------------------------------------
   const meshes = {
@@ -131,6 +138,7 @@ const create: ExperimentFactory = async (ctx) => {
     depthBias: 'f32',
     normalOffset: 'f32',
     debugView: 'u32',
+    noiseOffset: 'f32',
   });
 
   // --- Pipelines --------------------------------------------------------------
@@ -159,7 +167,29 @@ const create: ExperimentFactory = async (ctx) => {
     ],
   });
 
-  const [shadowPipeline, mainPipeline, overlayPipeline] = await Promise.all([
+  // Main + overlay pipelines exist in a multisampled and a single-sampled flavour
+  // (TAA needs a sampleable, single-sampled depth buffer).
+  const makeScenePipelines = (count: number) =>
+    Promise.all([
+      device.createRenderPipelineAsync({
+        label: `main-pass-x${count}`,
+        layout,
+        vertex: { module, entryPoint: 'vs_main', buffers: [MESH_VERTEX_LAYOUT] },
+        fragment: { module, entryPoint: 'fs_main', targets: [{ format: HDR_FORMAT }] },
+        primitive: { topology: 'triangle-list', cullMode: 'back' },
+        depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
+        multisample: { count },
+      }),
+      device.createRenderPipelineAsync({
+        label: `shadow-overlay-x${count}`,
+        layout,
+        vertex: { module, entryPoint: 'vs_fullscreen' },
+        fragment: { module, entryPoint: 'fs_overlay', targets: [{ format: HDR_FORMAT }] },
+        depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: false, depthCompare: 'always' },
+        multisample: { count },
+      }),
+    ]);
+  const [shadowPipeline, msaaPipelines, singlePipelines] = await Promise.all([
     device.createRenderPipelineAsync({
       label: 'shadow-pass',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shadowBindGroupLayout] }),
@@ -167,23 +197,8 @@ const create: ExperimentFactory = async (ctx) => {
       primitive: { topology: 'triangle-list', cullMode: 'back' },
       depthStencil: { format: SHADOW_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
     }),
-    device.createRenderPipelineAsync({
-      label: 'main-pass',
-      layout,
-      vertex: { module, entryPoint: 'vs_main', buffers: [MESH_VERTEX_LAYOUT] },
-      fragment: { module, entryPoint: 'fs_main', targets: [{ format: HDR_FORMAT }] },
-      primitive: { topology: 'triangle-list', cullMode: 'back' },
-      depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
-      multisample: { count: SAMPLE_COUNT },
-    }),
-    device.createRenderPipelineAsync({
-      label: 'shadow-overlay',
-      layout,
-      vertex: { module, entryPoint: 'vs_fullscreen' },
-      fragment: { module, entryPoint: 'fs_overlay', targets: [{ format: HDR_FORMAT }] },
-      depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: false, depthCompare: 'always' },
-      multisample: { count: SAMPLE_COUNT },
-    }),
+    makeScenePipelines(MSAA_SAMPLES),
+    makeScenePipelines(1),
   ]);
 
   const shadowSampler = device.createSampler({
@@ -239,9 +254,19 @@ const create: ExperimentFactory = async (ctx) => {
       camera.update(dt, size.width / size.height);
       ensureShadowMap(shadow.mapSize);
       const fullSize = [size.width, size.height] as const;
-      const msaaColor = targets.get('msaa', { size: fullSize, format: HDR_FORMAT, sampleCount: SAMPLE_COUNT });
-      const depth = targets.get('depth', { size: fullSize, format: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT });
+      const aa = look.antialiasing;
+      const samples = aa === 'msaa' ? MSAA_SAMPLES : 1;
+      const [mainPipeline, overlayPipeline] = samples > 1 ? msaaPipelines : singlePipelines;
       const scene = post.scene(size);
+      const msaaColor = samples > 1 ? targets.get('msaa', { size: fullSize, format: HDR_FORMAT, sampleCount: samples }) : null;
+      const depth = targets.get(`depth-x${samples}`, {
+        size: fullSize,
+        format: DEPTH_FORMAT,
+        sampleCount: samples,
+        usage: samples > 1 ? GPUTextureUsage.RENDER_ATTACHMENT : GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      });
+      if (aa !== 'taa') taa.reset();
+      const viewProj = aa === 'taa' ? taa.jitter(camera.viewProjection, size) : camera.viewProjection;
 
       // Objects.
       props.forEach((p, i) => {
@@ -270,7 +295,7 @@ const create: ExperimentFactory = async (ctx) => {
       const background = hexToLinear(look.background);
 
       frame
-        .set('viewProj', camera.viewProjection)
+        .set('viewProj', viewProj)
         .set('lightViewProj', lightViewProj)
         .set('cameraPos', camera.position)
         .set('lightDir', vec3.negate(toSun))
@@ -288,6 +313,7 @@ const create: ExperimentFactory = async (ctx) => {
         .set('depthBias', shadow.depthBias)
         .set('normalOffset', shadow.normalOffset)
         .set('debugView', look.view)
+        .set('noiseOffset', aa === 'taa' ? taa.frameNoiseOffset : 0)
         .upload();
 
       const encoder = device.createCommandEncoder({ label: 'shadow-map-pcf' });
@@ -320,19 +346,15 @@ const create: ExperimentFactory = async (ctx) => {
       const mp = encoder.beginRenderPass({
         label: 'main-pass',
         colorAttachments: [
-          {
-            view: msaaColor.view,
-            resolveTarget: scene.view,
-            loadOp: 'clear',
-            storeOp: 'discard',
-            clearValue: [0, 0, 0, 0],
-          },
+          msaaColor
+            ? { view: msaaColor.view, resolveTarget: scene.view, loadOp: 'clear', storeOp: 'discard', clearValue: [0, 0, 0, 0] }
+            : { view: scene.view, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0] },
         ],
         depthStencilAttachment: {
           view: depth.view,
           depthClearValue: 1,
           depthLoadOp: 'clear',
-          depthStoreOp: 'discard',
+          depthStoreOp: aa === 'taa' ? 'store' : 'discard',
         },
       });
       mp.setPipeline(mainPipeline);
@@ -348,7 +370,9 @@ const create: ExperimentFactory = async (ctx) => {
       }
       mp.end();
 
-      post.render(encoder, surface.currentTexture().createView(), { time, raw: look.view !== 0, background });
+      const source =
+        aa === 'taa' ? taa.resolve(encoder, { color: scene.texture, depth: depth.texture, viewProj: camera.viewProjection }) : undefined;
+      post.render(encoder, surface.currentTexture().createView(), { time, raw: look.view !== 0, background, source });
       device.queue.submit([encoder.finish()]);
     },
     dispose() {
@@ -356,6 +380,7 @@ const create: ExperimentFactory = async (ctx) => {
       shadowMap?.destroy();
       targets.destroy();
       post.destroy();
+      taa.destroy();
       objectBuffer.destroy();
       frame.destroy();
       Object.values(meshes).forEach((m) => m.destroy());
