@@ -33,9 +33,9 @@ This document is the roadmap. It is organised as **epics → stories**, each sto
 | Routing | Hash routes: `#/` and `#/x/<slug>` | Fully static hosting, no server rewrites. |
 | Shaders | Plain `.wgsl` files composed by string concatenation (`wgsl(...)`) | Readable error reports, no custom preprocessor to maintain. |
 | Uniforms | `UniformBlock` declares fields once in TS and generates the matching WGSL `struct` | Eliminates hand-maintained byte offsets, the #1 source of WebGPU bugs. |
-| Colour | Linear-light shading → tonemap (None/ACES/AgX) → manual sRGB encode + triangular dither | Canvas formats are not sRGB; dither kills banding in the long, smooth gradients lighting produces. |
+| Colour | Experiments render premultiplied linear HDR (`rgba16float`, alpha = coverage) → shared `PostProcess` (bloom, exposure, tonemap None/ACES/AgX, vignette, grain) → manual sRGB encode + triangular dither | Canvas formats are not sRGB; dither kills banding in the long, smooth gradients lighting produces; one post chain keeps every experiment consistent. |
 | Experiments | Each one is a lazy-loaded module exporting an `ExperimentFactory` | Index stays tiny; experiments are isolated and disposable. |
-| UI | Tiny in-house params panel (`src/ui/params.ts`) | No dependency, styled to match, schema → live values object. |
+| UI | Tiny in-house params panel (`src/ui/params.ts`), state mirrored into the URL hash | No dependency, styled to match, schema → live values object; any state is a shareable link. |
 | Testing | Headless Chromium + SwiftShader WebGPU smoke test (`npm run smoke`) | Catches WGSL/validation errors and blank frames in CI without a GPU. |
 
 **Browser targets:** Chrome/Edge 113+, Safari 26+, Firefox 141+ (Windows; other platforms as they ship). A clear message is shown where WebGPU is unavailable.
@@ -94,23 +94,25 @@ An experiment is **stable** (vs. **prototype**) when it has:
 - [x] **E0-S8: Gallery index + hash router** (S). Lazy-loaded registry, cards, experiment page with panel and notes.
 - [x] **E0-S9: Headless smoke test** (M). `npm run smoke`: build, serve, render every experiment in SwiftShader WebGPU, fail on errors, save screenshots to `.smoke/`.
 - [x] **E0-S10: First two experiments** (M). `pointer-light-2d` (E2) and `shadow-map-pcf` (E3) as end-to-end proofs of the foundation.
-- [ ] **E0-S11: Experiment template generator** (S). `npm run new <slug>` scaffolds `index.ts`, `shader.wgsl` and a registry entry.
-- [ ] **E0-S12: Param state in URL** (S). Serialise non-default params into the hash (`#/x/slug?intensity=2`) so states are shareable. *(Also enables E9-S4.)*
+- [x] **E0-S11: Experiment template generator** (S). `npm run new -- <slug> [--title "…"] [--epic …]` scaffolds `index.ts` + `shader.wgsl` from a working pointer-light template on the HDR → post path, and registers it.
+  *AC:* A freshly generated experiment type-checks and passes `npm run smoke` unmodified. Slug validation and duplicate detection work.
+- [x] **E0-S12: Param state in URL** (S). Non-default params are serialised into the hash (`#/x/slug?intensity=2&color=ffd2a1`) on change (debounced `replaceState`, no history spam), parsed and clamped on load. Unknown keys are ignored. "Copy link to this state" button. Param keys are enforced unique per panel. *(Also enables E9-S4.)*
 
 ### E1: Rendering toolkit
 
 > Shared building blocks that later epics lean on. Build each one *when the first experiment needs it*, not ahead of time.
 
-- [ ] **E1-S1: HDR render target + post chain** (M). `rgba16float` scene target, a `PostChain` of fullscreen passes, final tonemap/encode pass. Move tonemapping out of individual experiments.
-  *AC:* Two experiments share it; exposure/tonemap controls are host-level.
-- [ ] **E1-S2: Bloom** (M). Dual-filter (Kawase / CoD-style 13-tap) downsample/upsample chain with threshold-less energy-conserving mix.
-  *AC:* ≤ 1 ms at 1080p on integrated GPU; no fireflies with emissive point lights.
+- [x] **E1-S1: HDR render target + post chain** (M). `src/post/post.ts`: `PostProcess.create(ctx, defaults)` → `scene(size)` gives the `rgba16float` target, `render(encoder, out, { time, raw?, background? })` finishes the frame. Adds a standard **Post** params group (exposure, tonemap, bloom, radius, vignette, grain) to every experiment that uses it. That's opt-in per experiment, not host-level, so experiments can bypass it (`raw`) for debug views. Scene alpha is coverage: `background` composites the scene over a *display-space* colour after tonemapping, so 3D content can dissolve into a page colour exactly.
+  *AC:* Both experiments use it, and neither does its own tonemapping anymore. ✔
+- [x] **E1-S2: Bloom** (M). Up to 6-level pyramid: 13-tap CoD:AW downsample (Karis average on the first level against fireflies), 3×3 tent upsample with additive blending, energy-conserving `mix` with no threshold.
+  *Remaining:* measure the ≤ 1 ms @1080p budget once E9-S3 GPU timings exist.
 - [ ] **E1-S3: Temporal accumulation / TAA-lite** (L). Jittered projection, history reprojection with neighbourhood clamp. Lets Poisson/stochastic techniques (E3, E4, E5) run with few samples.
-- [ ] **E1-S4: PBR material model** (M). GGX specular + Lambert/Burley diffuse, metal/rough, shared `brdf.wgsl`. Replace Blinn-Phong where it matters.
+- [x] **E1-S4: PBR material model** (M). `src/shaders/brdf.wgsl`: metal/roughness, GGX + height-correlated Smith + Schlick, Lambert diffuse weighted by (1−F)(1−metallic), and `brdf_ambient` using Karis' analytic split-sum fit so a hemisphere "environment" gives plausible reflections before IBL exists. `shadow-map-pcf` uses it (copper torus, steel pole).
+  *Remaining:* `pointer-light-2d` still uses normalised Blinn-Phong (fine for its matte look); revisit with E2-S2.
 - [ ] **E1-S5: Image-based lighting** (M). Equirect HDR → prefiltered cubemap (compute), SH9 irradiance, split-sum BRDF LUT.
 - [ ] **E1-S6: glTF loader (minimal)** (M). Positions/normals/UVs/indices + base colour/metal-rough textures. Enough to drop in a hero object.
-- [ ] **E1-S7: Render-target pool** (S). Size-keyed texture cache with automatic resize; replaces the per-experiment `ensureTargets` code.
-- [ ] **E1-S8: Pipeline/shader cache & hot reload** (S). Reuse modules across experiments; Vite HMR for `.wgsl` re-creates pipelines without a page reload.
+- [x] **E1-S7: Render-target pool** (S). `src/gpu/targets.ts`: `TargetPool.get(name, { size, format, scale?, sampleCount? })` recreates a target only when its description changes. Used by the post chain (scene + bloom levels) and the shadow experiment (MSAA colour/depth).
+- [~] **E1-S8: Pipeline/shader cache & hot reload** (S). *Partial:* editing a `.wgsl` file triggers a Vite full reload, and because params live in the URL (E0-S12) the experiment comes back in the same state. *Remaining:* in-place pipeline swap without a reload; share compiled modules (e.g. `post`) across experiment switches.
 - [ ] **E1-S9: SDF toolkit** (M). Shared 2D/3D SDF primitives and operators (`sdf2d.wgsl`, `sdf3d.wgsl`), plus MSDF text rendering so headings can cast shadows (feeds E2-S3, E8-S2).
 
 ### E2: Interface lighting (2D / 2.5D)
@@ -220,9 +222,9 @@ An experiment is **stable** (vs. **prototype**) when it has:
 
 ## 5. Suggested sequencing
 
-1. **Milestone 1: Foundation** *(done)*. E0-S1…S10.
+1. **Milestone 1: Foundation** *(done)*. E0-S1…S12, plus E1-S1, S2, S4, S7.
 2. **Milestone 2: Ship the gallery.** E10-S1, E10-S2, E9-S1, E0-S11, E0-S12. The site is public, tested and easy to extend.
-3. **Milestone 3: Web-native lighting.** E1-S1, E1-S2, E2-S2, E2-S4, E8-S1, E3-S8. These are the most immediately useful for real websites.
+3. **Milestone 3: Web-native lighting.** E2-S2, E2-S4, E8-S1, E3-S8 (on top of the finished E1-S1/S2). These are the most immediately useful for real websites.
 4. **Milestone 4: Shadow reference.** E3-S1 (finish), E3-S2, E3-S3, E3-S5, E3-S6, E9-S2, E9-S3.
 5. **Milestone 5: Atmosphere & GI.** E1-S3, E5-S1, E5-S2, E4-S1, E4-S2, E2-S6.
 6. **Milestone 6: Style & scale.** E6-*, E7-S1, E7-S2, E8-S4.
@@ -235,7 +237,8 @@ An experiment is **stable** (vs. **prototype**) when it has:
 
 ## 7. Adding an experiment (current workflow)
 
-1. Create `src/experiments/<slug>/index.ts` exporting a default `ExperimentFactory` (see `pointer-light-2d` for a fullscreen-shader template, `shadow-map-pcf` for a 3D multi-pass template).
-2. Declare params with `ctx.params.add({...}, 'Group')`; declare uniforms with `new UniformBlock(device, 'Name', {...})` and splice `block.wgslStruct` into the shader.
-3. Register it in `src/gallery/registry.ts` with title, summary, epic, tags and notes.
-4. Run `npm run dev`, then `npm run smoke` before committing.
+1. `npm run new -- <slug> --title "Nice Title" --epic shadows` scaffolds `src/experiments/<slug>/` from a working template and registers it. (For a 3D, multi-pass, MSAA starting point, read `shadow-map-pcf`.)
+2. Declare params with `ctx.params.add({...}, 'Group')` (keys are unique and become URL keys). Declare uniforms with `new UniformBlock(device, 'Name', {...})` and splice `block.wgslStruct` into the shader.
+3. Render premultiplied linear HDR into `post.scene(size)`, then call `post.render(...)`. Use `raw: true` for debug views.
+4. Fill in the summary, tags and notes in `src/gallery/registry.ts`.
+5. Run `npm run dev`, then `npm run smoke` before committing.

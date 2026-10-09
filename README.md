@@ -18,7 +18,10 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + static build to dist/
 npm run smoke      # build, then render every experiment headlessly (SwiftShader WebGPU)
+npm run new -- my-effect --title "My Effect" --epic shadows   # scaffold + register an experiment
 ```
+
+Every parameter change is mirrored into the URL (`#/x/shadow-map-pcf?mode=1&bloom=0.15`), so any state is a shareable link.
 
 Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 26+, Firefox 141+ on Windows).
 
@@ -28,11 +31,13 @@ The smoke test uses `playwright-core` with the Chromium found by Playwright's re
 
 ```
 src/
-  gpu/           device/context, canvas surface, shader helpers, typed uniforms, geometry
-  shaders/       shared WGSL chunks: colour pipeline & noise, fullscreen triangle, shadow filters
+  gpu/           device/context, canvas surface, shader helpers, typed uniforms, geometry, target pool
+  post/          shared HDR post chain: bloom, exposure, tonemapping, vignette, grain
+  shaders/       shared WGSL chunks: colour & noise, fullscreen triangle, shadow filters, PBR BRDF
   scene/         orbit camera
   ui/            params panel, pointer tracker, frame stats
   gallery/       router views, experiment host, registry
   experiments/   one folder per experiment (index.ts + shader.wgsl)
-scripts/smoke.mjs  headless render test
+scripts/smoke.mjs           headless render test
+scripts/new-experiment.mjs  experiment generator
 ```

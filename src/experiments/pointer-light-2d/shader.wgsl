@@ -8,6 +8,7 @@
 //      clearance-to-distance ratio for a soft penumbra (Quilez-style),
 //      while letting the ray rise over shapes so shadows have finite length,
 //   3. shade with inverse-square falloff and Lambert/Blinn-Phong.
+// Outputs linear HDR into the post chain's scene target.
 // Requires (prepended): common.wgsl, fullscreen.wgsl, the `Params` struct.
 // ---------------------------------------------------------------------------
 
@@ -142,14 +143,12 @@ fn fs_main(v: FullscreenOut) -> @location(0) vec4f {
     col *= mix(0.55, 1.0, smoothstep(0.0, max(1.2 * u.shapeHeight, 1e-3), d));
   }
 
-  // Visible light bulbs as a soft additive glow (no geometry, purely cosmetic).
+  // Visible light bulbs: a small, very bright core that the bloom pass spreads out.
   var lights = array<Light, 2>(l0, l1);
   for (var i = 0; i < 2; i++) {
     let r = length(p - lights[i].pos.xy);
-    col += lights[i].color * 0.02 * exp(-r * r / (lights[i].radius * lights[i].radius * 0.5 + 1e-5));
+    col += lights[i].color * 0.6 * exp(-r * r / (lights[i].radius * lights[i].radius * 0.08 + 1e-5));
   }
-
-  col *= u.exposure;
 
   if (u.debugView == 1u) { col = vec3f(shadow_dbg); }
   if (u.debugView == 2u) {
@@ -161,12 +160,6 @@ fn fs_main(v: FullscreenOut) -> @location(0) vec4f {
   }
   if (u.debugView == 3u) { col = srgb_to_linear(n * 0.5 + 0.5); }
 
-  var out = col;
-  if (u.debugView == 0u) {
-    out = tonemap(col, u.tonemap);
-    // Film grain in linear space, scaled by luminance so blacks stay clean.
-    let g = hash12(frag + fract(u.time) * 1000.0) - 0.5;
-    out += g * u.grain * sqrt(luminance(out) + 1e-4);
-  }
-  return vec4f(display_encode(out, frag), 1.0);
+  // Linear HDR out; exposure, bloom, tonemapping and grain happen in the shared post chain.
+  return vec4f(col, 1.0);
 }

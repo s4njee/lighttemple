@@ -48,6 +48,7 @@ export const experiments: ExperimentMeta[] = [
     notes: [
       'A depth-only pass renders the scene from the sun into a 32-bit depth texture through an orthographic projection. The main pass reprojects each fragment into that space and compares depths.',
       'Filters: "Hard" is a single hardware comparison, which with a linear comparison sampler is already 2×2 bilinear PCF. "PCF grid" averages a (2r+1)² block of those. "Poisson" takes 16 taps in a disc rotated per pixel by interleaved gradient noise, trading banding for fine grain. "PCSS" first searches for blockers, then scales the filter by receiver–blocker distance, so shadows are crisp at contact and soften with distance. Watch the thin pole.',
+      'Materials use the shared metal/roughness PBR model (GGX, height-correlated Smith, Schlick Fresnel). The "environment" is just a sky/ground hemisphere, fed through Karis\' analytic split-sum fit, so the copper torus and steel pole read as metal without any cubemaps.',
       'Acne control combines a small constant depth bias with normal-offset sampling scaled by shadow-map texel size, which avoids most peter-panning. Shadows also fade out on surfaces turning away from the light.',
       'A radial fade is applied after tonemapping so it matches the clear colour exactly, and the floor dissolves into the background with no visible edge. Useful when a 3D scene has to sit inside a flat-coloured page section.',
     ],

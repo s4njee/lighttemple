@@ -1,12 +1,15 @@
 import { mat4, vec3, type Mat4 } from 'wgpu-matrix';
 import commonWgsl from '../../shaders/common.wgsl?raw';
 import fullscreenWgsl from '../../shaders/fullscreen.wgsl?raw';
+import brdfWgsl from '../../shaders/brdf.wgsl?raw';
 import shadowWgsl from '../../shaders/shadow.wgsl?raw';
 import { MESH_VERTEX_LAYOUT, MESH_VERTEX_WGSL, box, plane, sphere, torus, uploadMesh, type Mesh } from '../../gpu/geometry';
 import { createShader, wgsl } from '../../gpu/shader';
+import { TargetPool } from '../../gpu/targets';
+import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { UniformBlock } from '../../gpu/uniforms';
 import { OrbitCamera } from '../../scene/orbit-camera';
-import { hexToLinear, linearToSrgb } from '../../ui/params';
+import { hexToLinear } from '../../ui/params';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 
@@ -16,17 +19,20 @@ const SHADOW_FORMAT: GPUTextureFormat = 'depth32float';
 /** Half-width of the light's orthographic frustum (world units); covers the props. */
 const SHADOW_EXTENT = 5.5;
 const LIGHT_DISTANCE = 20;
-const OBJECT_STRIDE = 80; // mat4x4f + vec4f
+const OBJECT_STRIDE = 96; // mat4x4f + 2 × vec4f
 
 interface Prop {
   mesh: Mesh;
   color: string;
-  gloss: number;
+  /** Perceptual roughness 0..1. */
+  roughness: number;
+  metallic?: number;
   /** Model matrix as a function of animation time. */
   transform: (t: number) => Mat4;
 }
 
-const create: ExperimentFactory = async ({ device, format, surface, params, reducedMotion }) => {
+const create: ExperimentFactory = async (ctx) => {
+  const { device, surface, params, reducedMotion } = ctx;
   const light = params.add(
     {
       azimuth: { value: 35, min: -180, max: 180, step: 1 },
@@ -50,18 +56,17 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
   );
   const look = params.add(
     {
-      background: { value: '#c9c5bf', type: 'color' },
+      background: { value: '#c9c5bf', type: 'color', hint: 'Page colour the floor fades into (display space, matched exactly).' },
       sky: { value: '#a9bcd6', type: 'color' },
       ground: { value: '#6b5d52', type: 'color' },
       ambient: { value: 0.28, min: 0, max: 1.5, step: 0.01 },
-      exposure: { value: 1, min: 0.1, max: 4, step: 0.01 },
-      tonemap: { value: 2, options: { None: 0, ACES: 1, AgX: 2 } },
       view: { value: 0, options: { Lit: 0, Visibility: 1, 'Light depth': 2 } },
       showMap: { value: false, label: 'Show shadow map' },
       animate: { value: !reducedMotion },
     },
     'Look & debug',
   );
+  const post = await PostProcess.create(ctx, { bloom: 0.02, vignette: 0.12, grain: 0.02 });
 
   // --- Scene ------------------------------------------------------------------
   const meshes = {
@@ -72,30 +77,32 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
   };
   const T = (x: number, y: number, z: number) => mat4.translation([x, y, z]);
   const props: Prop[] = [
-    { mesh: meshes.ground, color: '#d8cfc4', gloss: 0.1, transform: () => mat4.identity() },
+    { mesh: meshes.ground, color: '#d8cfc4', roughness: 0.9, transform: () => mat4.identity() },
     {
       mesh: meshes.torus,
-      color: '#e9b78f',
-      gloss: 0.6,
+      // Polished copper.
+      color: '#f2b08a',
+      roughness: 0.32,
+      metallic: 1,
       transform: (t) => mat4.rotateX(mat4.rotateY(T(0, 1.15, 0), t * 0.35), Math.PI / 2),
     },
-    { mesh: meshes.sphere, color: '#c95f4b', gloss: 0.5, transform: () => mat4.scale(T(-1.9, 0.6, 0.9), [0.6, 0.6, 0.6]) },
-    { mesh: meshes.sphere, color: '#e8e2d6', gloss: 0.3, transform: () => mat4.scale(T(-0.7, 0.35, 2.1), [0.35, 0.35, 0.35]) },
+    { mesh: meshes.sphere, color: '#c95f4b', roughness: 0.45, transform: () => mat4.scale(T(-1.9, 0.6, 0.9), [0.6, 0.6, 0.6]) },
+    { mesh: meshes.sphere, color: '#e8e2d6', roughness: 0.65, transform: () => mat4.scale(T(-0.7, 0.35, 2.1), [0.35, 0.35, 0.35]) },
     {
       mesh: meshes.sphere,
       color: '#7e9cc4',
-      gloss: 0.7,
+      roughness: 0.15,
       transform: (t) => mat4.scale(T(0.4, 2.4 + 0.25 * Math.sin(t * 0.8), -1.9), [0.38, 0.38, 0.38]),
     },
-    { mesh: meshes.box, color: '#a9b49f', gloss: 0.2, transform: () => mat4.scale(T(1.9, 1.1, -0.8), [0.6, 2.2, 0.6]) },
+    { mesh: meshes.box, color: '#a9b49f', roughness: 0.8, transform: () => mat4.scale(T(1.9, 1.1, -0.8), [0.6, 2.2, 0.6]) },
     {
       mesh: meshes.box,
       color: '#3f4a5c',
-      gloss: 0.4,
+      roughness: 0.5,
       transform: () => mat4.scale(mat4.rotateY(T(1.7, 0.2, 1.5), 0.6), [1.2, 0.4, 1.2]),
     },
     // A thin pole: the textbook demo of contact-hardening (sharp at the base, soft at the tip).
-    { mesh: meshes.box, color: '#2b2b30', gloss: 0.3, transform: () => mat4.scale(T(-1.7, 1.5, -1.6), [0.07, 3, 0.07]) },
+    { mesh: meshes.box, color: '#9a9ca3', roughness: 0.35, metallic: 1, transform: () => mat4.scale(T(-1.7, 1.5, -1.6), [0.07, 3, 0.07]) },
   ];
 
   const objectData = new Float32Array((props.length * OBJECT_STRIDE) / 4);
@@ -109,14 +116,12 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
     viewProj: 'mat4x4f',
     lightViewProj: 'mat4x4f',
     cameraPos: 'vec3f',
-    exposure: 'f32',
+    fadeStart: 'f32',
     lightDir: 'vec3f',
     shadowMode: 'u32',
     lightColor: 'vec4f',
     skyColor: 'vec4f',
     groundColor: 'vec4f',
-    fogColor: 'vec4f',
-    fadeStart: 'f32',
     fadeEnd: 'f32',
     pcfRadius: 'f32',
     lightTan: 'f32',
@@ -125,7 +130,6 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
     shadowTexelWorld: 'f32',
     depthBias: 'f32',
     normalOffset: 'f32',
-    tonemap: 'u32',
     debugView: 'u32',
   });
 
@@ -133,7 +137,7 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
   const module = await createShader(
     device,
     'shadow-map-pcf',
-    wgsl(commonWgsl, fullscreenWgsl, MESH_VERTEX_WGSL, frame.wgslStruct, shadowWgsl, shaderWgsl),
+    wgsl(commonWgsl, fullscreenWgsl, MESH_VERTEX_WGSL, frame.wgslStruct, shadowWgsl, brdfWgsl, shaderWgsl),
   );
 
   const bindGroupLayout = device.createBindGroupLayout({
@@ -167,7 +171,7 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
       label: 'main-pass',
       layout,
       vertex: { module, entryPoint: 'vs_main', buffers: [MESH_VERTEX_LAYOUT] },
-      fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
+      fragment: { module, entryPoint: 'fs_main', targets: [{ format: HDR_FORMAT }] },
       primitive: { topology: 'triangle-list', cullMode: 'back' },
       depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
       multisample: { count: SAMPLE_COUNT },
@@ -176,7 +180,7 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
       label: 'shadow-overlay',
       layout,
       vertex: { module, entryPoint: 'vs_fullscreen' },
-      fragment: { module, entryPoint: 'fs_overlay', targets: [{ format }] },
+      fragment: { module, entryPoint: 'fs_overlay', targets: [{ format: HDR_FORMAT }] },
       depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: false, depthCompare: 'always' },
       multisample: { count: SAMPLE_COUNT },
     }),
@@ -222,45 +226,28 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
     });
   };
 
-  let msaaColor: GPUTexture | null = null;
-  let depth: GPUTexture | null = null;
-  const ensureTargets = (w: number, h: number) => {
-    if (msaaColor?.width === w && msaaColor.height === h) return;
-    msaaColor?.destroy();
-    depth?.destroy();
-    msaaColor = device.createTexture({
-      label: 'msaa-color',
-      size: [w, h],
-      format,
-      sampleCount: SAMPLE_COUNT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-    depth = device.createTexture({
-      label: 'depth',
-      size: [w, h],
-      format: DEPTH_FORMAT,
-      sampleCount: SAMPLE_COUNT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT,
-    });
-  };
+  const targets = new TargetPool(device);
 
   const camera = new OrbitCamera(surface.canvas, { target: [0, 0.9, 0], distance: 9.5, yaw: 0.75, pitch: 0.42, maxDistance: 25 });
   let animTime = 0;
   let lightSpin = 0;
 
   return {
-    frame({ dt, size }) {
+    frame({ time, dt, size }) {
       if (look.animate) animTime += dt;
       if (light.orbitLight) lightSpin += dt * 0.15;
       camera.update(dt, size.width / size.height);
       ensureShadowMap(shadow.mapSize);
-      ensureTargets(size.width, size.height);
+      const fullSize = [size.width, size.height] as const;
+      const msaaColor = targets.get('msaa', { size: fullSize, format: HDR_FORMAT, sampleCount: SAMPLE_COUNT });
+      const depth = targets.get('depth', { size: fullSize, format: DEPTH_FORMAT, sampleCount: SAMPLE_COUNT });
+      const scene = post.scene(size);
 
       // Objects.
       props.forEach((p, i) => {
         const o = (i * OBJECT_STRIDE) / 4;
         objectData.set(p.transform(animTime), o);
-        objectData.set([...hexToLinear(p.color), p.gloss], o + 16);
+        objectData.set([...hexToLinear(p.color), p.roughness, p.metallic ?? 0, 0, 0, 0], o + 16);
       });
       device.queue.writeBuffer(objectBuffer, 0, objectData);
 
@@ -280,19 +267,17 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
       const lc = hexToLinear(light.color);
       const sky = hexToLinear(look.sky);
       const ground = hexToLinear(look.ground);
-      const fog = hexToLinear(look.background);
+      const background = hexToLinear(look.background);
 
       frame
         .set('viewProj', camera.viewProjection)
         .set('lightViewProj', lightViewProj)
         .set('cameraPos', camera.position)
-        .set('exposure', look.exposure)
         .set('lightDir', vec3.negate(toSun))
         .set('shadowMode', shadow.mode)
         .set('lightColor', [lc[0] * light.intensity, lc[1] * light.intensity, lc[2] * light.intensity, 0])
         .set('skyColor', [sky[0] * look.ambient, sky[1] * look.ambient, sky[2] * look.ambient, 0])
         .set('groundColor', [ground[0] * look.ambient, ground[1] * look.ambient, ground[2] * look.ambient, 0])
-        .set('fogColor', [...fog, 0])
         .set('fadeStart', 6)
         .set('fadeEnd', 22)
         .set('pcfRadius', shadow.pcfRadius)
@@ -302,7 +287,6 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
         .set('shadowTexelWorld', (2 * SHADOW_EXTENT) / shadow.mapSize)
         .set('depthBias', shadow.depthBias)
         .set('normalOffset', shadow.normalOffset)
-        .set('tonemap', look.tonemap)
         .set('debugView', look.view)
         .upload();
 
@@ -337,15 +321,15 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
         label: 'main-pass',
         colorAttachments: [
           {
-            view: msaaColor!.createView(),
-            resolveTarget: surface.currentTexture().createView(),
+            view: msaaColor.view,
+            resolveTarget: scene.view,
             loadOp: 'clear',
             storeOp: 'discard',
-            clearValue: [...fog.map(linearToSrgb), 1],
+            clearValue: [0, 0, 0, 0],
           },
         ],
         depthStencilAttachment: {
-          view: depth!.createView(),
+          view: depth.view,
           depthClearValue: 1,
           depthLoadOp: 'clear',
           depthStoreOp: 'discard',
@@ -364,13 +348,14 @@ const create: ExperimentFactory = async ({ device, format, surface, params, redu
       }
       mp.end();
 
+      post.render(encoder, surface.currentTexture().createView(), { time, raw: look.view !== 0, background });
       device.queue.submit([encoder.finish()]);
     },
     dispose() {
       camera.destroy();
       shadowMap?.destroy();
-      msaaColor?.destroy();
-      depth?.destroy();
+      targets.destroy();
+      post.destroy();
       objectBuffer.destroy();
       frame.destroy();
       Object.values(meshes).forEach((m) => m.destroy());

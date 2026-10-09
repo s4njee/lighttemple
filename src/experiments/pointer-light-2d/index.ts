@@ -1,12 +1,14 @@
 import commonWgsl from '../../shaders/common.wgsl?raw';
 import fullscreenWgsl from '../../shaders/fullscreen.wgsl?raw';
 import { createShader, wgsl } from '../../gpu/shader';
+import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { UniformBlock } from '../../gpu/uniforms';
 import { hexToLinear } from '../../ui/params';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 
-const create: ExperimentFactory = async ({ device, format, surface: canvas, params, pointer, reducedMotion }) => {
+const create: ExperimentFactory = async (ctx) => {
+  const { device, surface: canvas, params, pointer, reducedMotion } = ctx;
   const light = params.add(
     {
       intensity: { value: 1.6, min: 0, max: 6, step: 0.01 },
@@ -37,16 +39,14 @@ const create: ExperimentFactory = async ({ device, format, surface: canvas, para
     },
     'Surface',
   );
-  const look = params.add(
+  const debug = params.add(
     {
-      exposure: { value: 1.0, min: 0.1, max: 4, step: 0.01 },
-      tonemap: { value: 2, options: { None: 0, ACES: 1, AgX: 2 } },
-      grain: { value: 0.04, min: 0, max: 0.2, step: 0.005 },
       steps: { value: 48, min: 8, max: 128, step: 1, hint: 'Shadow ray-march steps per light.' },
       view: { value: 0, options: { Lit: 0, 'Shadow mask': 1, 'Distance field': 2, Normals: 3 } },
     },
-    'Look & debug',
+    'Quality & debug',
   );
+  const post = await PostProcess.create(ctx, { bloom: 0.06, vignette: 0.3, grain: 0.04 });
 
   const uniforms = new UniformBlock(device, 'Params', {
     resolution: 'vec2f',
@@ -61,10 +61,7 @@ const create: ExperimentFactory = async ({ device, format, surface: canvas, para
     shapeColor: 'vec4f',
     shapeHeight: 'f32',
     bevel: 'f32',
-    grain: 'f32',
-    exposure: 'f32',
     steps: 'u32',
-    tonemap: 'u32',
     debugView: 'u32',
   });
 
@@ -78,7 +75,7 @@ const create: ExperimentFactory = async ({ device, format, surface: canvas, para
     label: 'pointer-light-2d',
     layout: 'auto',
     vertex: { module, entryPoint: 'vs_fullscreen' },
-    fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
+    fragment: { module, entryPoint: 'fs_main', targets: [{ format: HDR_FORMAT }] },
     primitive: { topology: 'triangle-list' },
   });
 
@@ -125,26 +122,25 @@ const create: ExperimentFactory = async ({ device, format, surface: canvas, para
         .set('shapeColor', [...hexToLinear(surface.shapes), surface.gloss])
         .set('shapeHeight', surface.shapeHeight)
         .set('bevel', surface.bevel)
-        .set('grain', look.grain)
-        .set('exposure', look.exposure)
-        .set('steps', look.steps)
-        .set('tonemap', look.tonemap)
-        .set('debugView', look.view)
+        .set('steps', debug.steps)
+        .set('debugView', debug.view)
         .upload();
 
       const encoder = device.createCommandEncoder({ label: 'pointer-light-2d' });
       const pass = encoder.beginRenderPass({
         colorAttachments: [
-          { view: canvas.currentTexture().createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
+          { view: post.scene(size).view, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
         ],
       });
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, bindGroup);
       pass.draw(3);
       pass.end();
+      post.render(encoder, canvas.currentTexture().createView(), { time, raw: debug.view !== 0 });
       device.queue.submit([encoder.finish()]);
     },
     dispose() {
+      post.destroy();
       uniforms.destroy();
     },
   };

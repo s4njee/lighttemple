@@ -1,13 +1,16 @@
 // ---------------------------------------------------------------------------
 // Directional-light shadow mapping with switchable filters.
-// Requires (prepended): common.wgsl, VertexIn, the `Frame` struct, shadow.wgsl
-// is appended after the bindings below.
+// Outputs premultiplied linear HDR (alpha = coverage) into the post chain.
+// Requires (prepended): common.wgsl, fullscreen.wgsl, VertexIn, the `Frame`
+// struct, shadow.wgsl and brdf.wgsl.
 // ---------------------------------------------------------------------------
 
 struct Object {
   model: mat4x4f,
-  // rgb = albedo (linear), a = gloss 0..1
+  // rgb = albedo (linear), a = perceptual roughness
   color: vec4f,
+  // x = metallic
+  material: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -80,32 +83,29 @@ fn fs_main(v: VsOut) -> @location(0) vec4f {
   // (they are already dark from N·L, and filtering there only adds acne).
   vis *= smoothstep(0.0, 0.08, ndl);
 
-  let albedo = obj.color.rgb;
-  let gloss = obj.color.a;
-  let shininess = mix(8.0, 256.0, gloss * gloss);
-  let h = normalize(l + vdir);
-  let spec = pow(saturate(dot(n, h)), shininess) * (shininess + 8.0) / (8.0 * PI) * mix(0.02, 0.25, gloss);
+  let m = Material(obj.color.rgb, obj.color.a, obj.material.x);
 
-  // Hemisphere ambient: sky from above, bounce from the ground below.
-  let hemi = mix(frame.groundColor.rgb, frame.skyColor.rgb, n.y * 0.5 + 0.5);
-  var col = albedo * hemi + frame.lightColor.rgb * ndl * vis * (albedo / PI + spec);
+  // Hemisphere "environment": sky from above, bounce from the ground below.
+  // Diffuse uses the normal; specular uses the reflection vector, softened
+  // with roughness, through the split-sum approximation.
+  let irradiance = mix(frame.groundColor.rgb, frame.skyColor.rgb, n.y * 0.5 + 0.5);
+  let r = reflect(-vdir, n);
+  let edge = mix(0.05, 0.8, m.roughness);
+  let env = mix(frame.groundColor.rgb, frame.skyColor.rgb, smoothstep(-edge, edge, r.y));
+  var col = brdf_ambient(m, n, vdir, irradiance, env) + frame.lightColor.rgb * vis * brdf_direct(m, n, vdir, l);
 
-  col *= frame.exposure;
   if (frame.debugView == 1u) { col = vec3f(vis); }
   if (frame.debugView == 2u) {
     // Light-space depth & out-of-frustum regions.
     col = select(vec3f(0.6, 0.1, 0.1), vec3f(lp.z), shadow_in_bounds(lp));
   }
-  var mapped = select(col, tonemap(col, frame.tonemap), frame.debugView == 0u);
 
-  // Radial fade on the world XZ plane, applied after tonemapping so it matches
-  // the clear colour exactly: the floor melts into the background with no seam
-  // while the props in the middle stay untouched.
-  if (frame.debugView == 0u) {
-    let fade = smoothstep(frame.fadeStart, frame.fadeEnd, length(v.world_pos.xz));
-    mapped = mix(mapped, frame.fogColor.rgb, fade);
-  }
-  return vec4f(display_encode(mapped, v.position.xy), 1.0);
+  // Coverage alpha: the floor fades out radially, and the post chain composites
+  // it over the page background *after* tonemapping, so the two match exactly
+  // and the floor melts away with no seam. Props in the middle stay opaque.
+  let fade = select(0.0, smoothstep(frame.fadeStart, frame.fadeEnd, length(v.world_pos.xz)), frame.debugView == 0u);
+  let coverage = 1.0 - fade;
+  return vec4f(col * coverage, coverage);
 }
 
 // --- Debug overlay: the raw shadow map in a corner ------------------------
@@ -115,6 +115,5 @@ fn fs_overlay(v: FullscreenOut) -> @location(0) vec4f {
   let dims = vec2f(textureDimensions(shadow_map));
   let d = textureLoad(shadow_map, vec2i(v.uv * dims), 0);
   // Stretch contrast: most of the scene lives in a narrow depth band.
-  let c = pow(saturate(d), 6.0);
-  return vec4f(linear_to_srgb(vec3f(c)), 1.0);
+  return vec4f(vec3f(pow(saturate(d), 6.0)), 1.0);
 }

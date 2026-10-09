@@ -12,11 +12,12 @@ import { PointerTracker } from '../ui/pointer';
 import { FrameStats } from '../ui/stats';
 import { EPIC_LABELS } from './registry';
 import { h } from './dom';
+import { experimentHash, replaceHash } from './route';
 import { reportStatus } from './status';
 
 const MAX_DT = 1 / 20;
 
-export function mountExperiment(root: HTMLElement, meta: ExperimentMeta): () => void {
+export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initialParams = new URLSearchParams()): () => void {
   document.title = `${meta.title} · Light Temple`;
   reportStatus({ state: 'loading', slug: meta.slug, frames: 0 });
 
@@ -81,7 +82,7 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta): () => 
     cleanups.push(() => surface.destroy());
     const pointer = new PointerTracker(canvas);
     cleanups.push(() => pointer.destroy());
-    const params = new ParamsPanel(panelBody);
+    const params = new ParamsPanel(panelBody, initialParams);
     cleanups.push(() => params.destroy());
     const stats = new FrameStats(stage);
     cleanups.push(() => stats.destroy());
@@ -115,10 +116,25 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta): () => 
       },
       'Renderer',
     );
-    params.onChange(() => {
+    const applyQuality = () => {
       surface.renderScale = quality.renderScale;
       surface.maxPixelRatio = quality.maxPixelRatio;
       surface.update();
+    };
+    applyQuality();
+
+    // Keep the URL in sync with non-default params so any state can be shared.
+    let urlTimer = 0;
+    params.onChange(() => {
+      applyQuality();
+      clearTimeout(urlTimer);
+      urlTimer = window.setTimeout(() => !disposed && replaceHash(experimentHash(meta.slug, params.serialize())), 150);
+    });
+    cleanups.push(() => clearTimeout(urlTimer));
+    params.button('Copy link to this state', () => {
+      const url = new URL(experimentHash(meta.slug, params.serialize()), location.href).href;
+      navigator.clipboard?.writeText(url).catch(() => {});
+      replaceHash(experimentHash(meta.slug, params.serialize()));
     });
     params.button('Reset parameters', () => params.reset());
 
