@@ -21,14 +21,14 @@ import { OrbitCamera } from '../../src/scene/orbit-camera';
 import { TextSdfGenerator, type TextSdf } from '../../src/sdf/text-sdf';
 import aceWgsl from './ace.wgsl?raw';
 import emblemUrl from './eye-emblem.png';
-import jostUrl from './fonts/jost-latin.woff2';
+import scriptUrl from './fonts/yesteryear-latin.woff2';
 
 const CARD_HALF: [number, number] = [0.63, 0.88];
 const FOV = (32 * Math.PI) / 180;
 // Playing-card indices are a condensed Roman; a regular serif squeezed horizontally reads the same.
 const SERIF = '"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", Georgia, serif';
-// The mark is set in Jost (SIL OFL, bundled), a geometric sans close to Supra / Futura.
-const GEOMETRIC = 'Jost, Futura, "Century Gothic", ui-sans-serif, sans-serif';
+// The mark is set in Yesteryear (SIL OFL, bundled), a slanted brush script in the spirit of the Supra badge.
+const SCRIPT = 'Yesteryear, "Brush Script MT", cursive';
 // Pure #FF0000: the mark is composited after tonemapping (see `red_ink` in ace.wgsl).
 const MARK_RED: [number, number, number] = [1, 0, 0];
 
@@ -76,14 +76,14 @@ async function main(): Promise<void> {
   const textGen = new TextSdfGenerator(device);
   try {
     // Loaded from bytes so it works under strict font-src policies too.
-    const jost = await (await fetch(jostUrl)).arrayBuffer();
-    document.fonts.add(await new FontFace('Jost', jost, { weight: '100 900' }).load());
+    const script = await (await fetch(scriptUrl)).arrayBuffer();
+    document.fonts.add(await new FontFace('Yesteryear', script).load());
   } catch (err) {
-    console.warn('Jost failed to load; using a fallback geometric sans.', err);
+    console.warn('Yesteryear failed to load; using a fallback script.', err);
   }
   const [indexText, markText, emblemImage] = await Promise.all([
     textGen.generate({ text: 'A', family: SERIF, weight: 400, size: 220 }),
-    textGen.generate({ text: 'mk7s', family: GEOMETRIC, weight: 600, size: 160 }),
+    textGen.generate({ text: 'mk7s', family: SCRIPT, weight: 400, size: 160 }),
     fetch(emblemUrl)
       .then((r) => r.blob())
       .then((b) => createImageBitmap(b, { colorSpaceConversion: 'none' })),
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   const emblemHalfW = 0.21 * 0.44;
   const emblemHalfH = (emblemHalfW * emblemImage.height) / emblemImage.width;
   const emblemRect = [0, 0.27 * 0.44, emblemHalfW, emblemHalfH];
-  const mark = place(markText, 0, 0.045 * 0.44, 0.02);
+  const mark = place(markText, 0, 0.045 * 0.44, 0.024);
 
   const u = new UniformBlock(device, 'Ace', {
     invViewProj: 'mat4x4f',

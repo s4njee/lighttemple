@@ -120,7 +120,7 @@ fn spade_ornament(s: vec2f) -> vec2f {
   orn = min(orn, sd_scroll(m, vec2f(0.19, 0.42), 0.04, 0.085, -1.0) + 0.0035);
   orn = max(orn, inner);
   // Clear black space for the tiny "mk7s" mark under the emblem.
-  orn = max(orn, -sd_round_box(s - vec2f(0.0, 0.045), vec2f(0.12, 0.035), 0.02));
+  orn = max(orn, -sd_round_box(s - vec2f(0.0, 0.045), vec2f(0.15, 0.04), 0.02));
   white = min(white, orn);
   return vec2f(white, inner);
 }
