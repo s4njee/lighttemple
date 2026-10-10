@@ -75,7 +75,9 @@ async function main(): Promise<void> {
 
   const textGen = new TextSdfGenerator(device);
   try {
-    document.fonts.add(await new FontFace('Jost', `url(${jostUrl}) format('woff2')`, { weight: '100 900' }).load());
+    // Loaded from bytes so it works under strict font-src policies too.
+    const jost = await (await fetch(jostUrl)).arrayBuffer();
+    document.fonts.add(await new FontFace('Jost', jost, { weight: '100 900' }).load());
   } catch (err) {
     console.warn('Jost failed to load; using a fallback geometric sans.', err);
   }
@@ -126,7 +128,6 @@ async function main(): Promise<void> {
     indexPip: 'vec2f',
     markScalePad: 'vec2f',
     envIntensity: 'f32',
-    pearl: 'f32',
     glitter: 'f32',
     glitterScale: 'f32',
     filmThickness: 'f32',
@@ -204,7 +205,6 @@ async function main(): Promise<void> {
     .set('cardRadius', 0.055)
     .set('halfThickness', 0.006)
     .set('envIntensity', 0.8)
-    .set('pearl', 0.0)
     .set('glitter', 0.16)
     .set('glitterScale', 380)
     .set('filmThickness', 430)

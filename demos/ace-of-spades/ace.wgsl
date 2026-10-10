@@ -4,7 +4,7 @@
 // One fullscreen pass. Each pixel ray-marches a thin rounded card (an extruded
 // rounded-rectangle SDF) centred at the origin; the camera orbits it.
 //
-//   front: white stock with a classic ornate ace: the spade and the
+//   front: matte white stock with a classic ornate ace: the spade and the
 //          corner pips are polished black marble (warped-noise veins) under a
 //          holographic laminate (diffraction rainbow + glitter, thin-film sheen).
 //          White printed detail inside the spade: keylines, a ring of dots,
@@ -243,20 +243,15 @@ fn shade_marble(p: vec2f, centre: vec2f, pos: vec3f, n: vec3f, v: vec3f, ax: vec
   return c + holo(p, centre, pos, n, v, ax, ay);
 }
 
-/// Dielectric stock / ink under a glossy laminate.
-fn shade_printed(albedo: vec3f, sheen: f32, pos: vec3f, n: vec3f, v: vec3f) -> vec3f {
-  let film = mix(vec3f(1.0), thin_film(saturate(dot(n, v)), 320.0, 1.5), sheen);
-  let base = Material(albedo, 0.55, 0.0);
-  let coat = Material(vec3f(0.0), 0.07, 0.0);
-  let coat_f = f_schlick(vec3f(0.04), saturate(dot(n, v))).x;
+/// Matte uncoated stock / ink: diffuse with a very rough, faint specular, so the
+/// white card reads as paper and only the holographic layers catch highlights.
+fn shade_matte(albedo: vec3f, pos: vec3f, n: vec3f, v: vec3f) -> vec3f {
+  let base = Material(albedo, 0.95, 0.0);
   var c = ibl_irradiance(n) / PI * albedo * u.envIntensity;
-  c += ibl_specular_radiance(reflect(-v, n), 0.07) * coat_f * film * u.envIntensity;
   for (var i = 0; i < 3; i++) {
     let lt = light(i);
     let lv = lt.pos - pos;
-    let l = normalize(lv);
-    let li = lt.color / dot(lv, lv);
-    c += li * (brdf_direct(base, n, v, l) + brdf_direct(coat, n, v, l) * film);
+    c += lt.color / dot(lv, lv) * brdf_direct(base, n, v, normalize(lv));
   }
   return c;
 }
@@ -269,18 +264,18 @@ fn shade_front(p: vec2f, pos: vec3f, n: vec3f, v: vec3f, aa: f32) -> vec3f {
   let marble_d = min(spade, min(sd_index(p), sd_index(-p)));
   let stone = smoothstep(aa, -aa, marble_d);
 
-  var c = shade_printed(vec3f(0.97), u.pearl, pos, n, v);
+  var c = shade_matte(vec3f(0.97), pos, n, v);
   if (stone > 0.0) {
     var black = shade_marble(p, SPADE_CENTRE + vec2f(0.0, 0.05), pos, n, v, ax, ay);
     // White printed ornament and the tiny "mk7s" mark on the centre spade.
     if (spade < aa) {
       let orn = spade_ornament(s);
       let white_ink = smoothstep(aa, -aa, orn.x * SPADE_SIZE);
-      if (white_ink > 0.0) { black = mix(black, shade_printed(vec3f(0.95), 0.0, pos, n, v), white_ink); }
+      if (white_ink > 0.0) { black = mix(black, shade_matte(vec3f(0.95), pos, n, v), white_ink); }
       // Eye-in-triangle emblem: white plate with holographic-foil engraving.
       let em = emblem(p, aa);
       if (em.x > 0.0) {
-        black = mix(black, shade_printed(vec3f(0.95), 0.0, pos, n, v), em.x);
+        black = mix(black, shade_matte(vec3f(0.95), pos, n, v), em.x);
         if (em.y > 0.0) { black = mix(black, shade_holofoil(p, u.emblemRect.xy, pos, n, v, ax, ay), em.y); }
       }
       // "mk7s": flat pure red, composited in post (see `red_ink`).
@@ -306,7 +301,7 @@ fn shade_back(p: vec2f, pos: vec3f, n: vec3f, v: vec3f, aa: f32) -> vec3f {
   let lines = smoothstep(aa, -aa, line_d);
   var c = shade_marble(p, vec2f(0.0), pos, n, v, ax, ay);
   if (lines > 0.0) {
-    c = mix(c, shade_printed(vec3f(0.75, 0.74, 0.72), u.pearl, pos, n, v) + holo(p, vec2f(0.0), pos, n, v, ax, ay), lines);
+    c = mix(c, shade_matte(vec3f(0.75, 0.74, 0.72), pos, n, v) + holo(p, vec2f(0.0), pos, n, v, ax, ay), lines);
   }
   return c;
 }
@@ -318,7 +313,7 @@ fn shade_card(pos: vec3f, v: vec3f, footprint: f32) -> vec3f {
   if (n.z > 0.7) { return shade_front(pos.xy, pos, n, v, aa); }
   if (n.z < -0.7) { return shade_back(vec2f(-pos.x, pos.y), pos, n, v, aa); }
   // Edge: white paper core.
-  return shade_printed(vec3f(0.8, 0.79, 0.77), 0.0, pos, n, v);
+  return shade_matte(vec3f(0.8, 0.79, 0.77), pos, n, v);
 }
 
 @fragment
