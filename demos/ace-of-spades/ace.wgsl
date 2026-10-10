@@ -23,6 +23,11 @@
 @group(0) @binding(3) var lin: sampler;
 @group(0) @binding(4) var emblem_tex: texture_2d<f32>;
 
+// Coverage of the red "mk7s" mark at this pixel. It is written to alpha so the post
+// chain composites its background colour (pure #FF0000) there after tonemapping,
+// keeping the red exact instead of lit, tonemapped and pastel.
+var<private> red_ink: f32 = 0.0;
+
 const SPADE_CENTRE = vec2f(0.0, 0.0);
 const SPADE_SIZE = 0.44;
 
@@ -278,9 +283,8 @@ fn shade_front(p: vec2f, pos: vec3f, n: vec3f, v: vec3f, aa: f32) -> vec3f {
         black = mix(black, shade_printed(vec3f(0.95), 0.0, pos, n, v), em.x);
         if (em.y > 0.0) { black = mix(black, shade_holofoil(p, u.emblemRect.xy, pos, n, v, ax, ay), em.y); }
       }
-      // "mk7s" in red ink.
-      let mark = smoothstep(aa, -aa, sd_text_tex(mark_sdf, u.markRect, u.markScalePad, p));
-      if (mark > 0.0) { black = mix(black, shade_printed(vec3f(0.78, 0.015, 0.025), 0.0, pos, n, v), mark); }
+      // "mk7s": flat pure red, composited in post (see `red_ink`).
+      red_ink = stone * smoothstep(aa, -aa, sd_text_tex(mark_sdf, u.markRect, u.markScalePad, p));
     }
     c = mix(c, black, stone);
   }
@@ -354,5 +358,7 @@ fn fs_main(fv: FullscreenOut) -> @location(0) vec4f {
   if (coverage <= 0.0) { return vec4f(0.0, 0.0, 0.0, 1.0); }
   let pos = ro + rd * select(closest_t, t, hit);
   let col = shade_card(pos, -rd, footprint);
-  return vec4f(col * coverage, 1.0);
+  // Premultiplied: alpha < 1 lets the post background (pure red) show through the mark.
+  let a = 1.0 - red_ink * coverage;
+  return vec4f(col * coverage * a, a);
 }

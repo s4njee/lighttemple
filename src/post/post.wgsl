@@ -93,5 +93,7 @@ fn fs_composite(v: FullscreenOut) -> @location(0) vec4f {
   }
 
   let out = mix(post.background, c, a);
-  return vec4f(display_encode(out, frag), 1.0);
+  // Flat background stays undithered so its colour is exact (e.g. #FF0000).
+  let encoded = mix(linear_to_srgb(saturate3(out)), display_encode(out, frag), a);
+  return vec4f(encoded, 1.0);
 }

@@ -21,12 +21,16 @@ import { OrbitCamera } from '../../src/scene/orbit-camera';
 import { TextSdfGenerator, type TextSdf } from '../../src/sdf/text-sdf';
 import aceWgsl from './ace.wgsl?raw';
 import emblemUrl from './eye-emblem.png';
+import jostUrl from './fonts/jost-latin.woff2';
 
 const CARD_HALF: [number, number] = [0.63, 0.88];
 const FOV = (32 * Math.PI) / 180;
 // Playing-card indices are a condensed Roman; a regular serif squeezed horizontally reads the same.
 const SERIF = '"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", Georgia, serif';
-const SANS = '"Helvetica Neue", Arial, ui-sans-serif, system-ui, sans-serif';
+// The mark is set in Jost (SIL OFL, bundled), a geometric sans close to Supra / Futura.
+const GEOMETRIC = 'Jost, Futura, "Century Gothic", ui-sans-serif, sans-serif';
+// Pure #FF0000: the mark is composited after tonemapping (see `red_ink` in ace.wgsl).
+const MARK_RED: [number, number, number] = [1, 0, 0];
 
 declare global {
   interface Window {
@@ -70,9 +74,14 @@ async function main(): Promise<void> {
   await ibl.setProcedural({ kind: 'studio' });
 
   const textGen = new TextSdfGenerator(device);
+  try {
+    document.fonts.add(await new FontFace('Jost', `url(${jostUrl}) format('woff2')`, { weight: '100 900' }).load());
+  } catch (err) {
+    console.warn('Jost failed to load; using a fallback geometric sans.', err);
+  }
   const [indexText, markText, emblemImage] = await Promise.all([
     textGen.generate({ text: 'A', family: SERIF, weight: 400, size: 220 }),
-    textGen.generate({ text: 'mk7s', family: SANS, weight: 600, size: 160 }),
+    textGen.generate({ text: 'mk7s', family: GEOMETRIC, weight: 600, size: 160 }),
     fetch(emblemUrl)
       .then((r) => r.blob())
       .then((b) => createImageBitmap(b, { colorSpaceConversion: 'none' })),
@@ -171,6 +180,10 @@ async function main(): Promise<void> {
     minPitch: -1.35,
     maxPitch: 1.35,
     fovY: FOV,
+    // Snappy: the card tracks the pointer closely, with just enough easing to stay smooth.
+    smoothing: 0.025,
+    rotateSpeed: 1.35,
+    zoomSpeed: 1.6,
   });
   camera.autoRotate = reducedMotion ? 0 : 0.12;
 
@@ -235,7 +248,7 @@ async function main(): Promise<void> {
     pass.setBindGroup(1, ibl.bindGroup);
     pass.draw(3);
     pass.end();
-    post.render(encoder, surface.currentTexture().createView(), { time, background: [0, 0, 0] });
+    post.render(encoder, surface.currentTexture().createView(), { time, background: MARK_RED });
     device.queue.submit([encoder.finish()]);
     window.__ace!.frames++;
   };

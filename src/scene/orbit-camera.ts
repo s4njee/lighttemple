@@ -18,6 +18,12 @@ export interface OrbitCameraOptions {
   minPitch?: number;
   maxPitch?: number;
   maxDistance?: number;
+  /** Half-life in seconds of the easing toward the dragged/zoomed goal (default 0.08). Lower = snappier. */
+  smoothing?: number;
+  /** Drag sensitivity multiplier (default 1). */
+  rotateSpeed?: number;
+  /** Wheel/pinch zoom sensitivity multiplier (default 1). */
+  zoomSpeed?: number;
 }
 
 export class OrbitCamera {
@@ -32,6 +38,9 @@ export class OrbitCamera {
   minPitch: number;
   maxPitch: number;
   maxDistance: number;
+  smoothing: number;
+  rotateSpeed: number;
+  zoomSpeed: number;
   /** Radians/sec of idle auto-rotation; 0 to disable. */
   autoRotate = 0;
 
@@ -61,6 +70,9 @@ export class OrbitCamera {
     this.minPitch = o.minPitch ?? -0.2;
     this.maxPitch = o.maxPitch ?? 1.45;
     this.maxDistance = o.maxDistance ?? 30;
+    this.smoothing = o.smoothing ?? 0.08;
+    this.rotateSpeed = o.rotateSpeed ?? 1;
+    this.zoomSpeed = o.zoomSpeed ?? 1;
     this.goal = { yaw: this.yaw, pitch: this.pitch, distance: this.distance };
     this.attach();
   }
@@ -88,7 +100,7 @@ export class OrbitCamera {
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (this.pinchDist > 0) this.dolly(this.pinchDist / d);
+        if (this.pinchDist > 0) this.dolly(Math.pow(this.pinchDist / d, this.zoomSpeed));
         this.pinchDist = d;
         return;
       }
@@ -97,7 +109,7 @@ export class OrbitCamera {
       const dy = e.clientY - this.dragging.y;
       this.dragging.x = e.clientX;
       this.dragging.y = e.clientY;
-      const s = 4 / Math.max(200, el.clientHeight);
+      const s = (4 * this.rotateSpeed) / Math.max(200, el.clientHeight);
       this.goal.yaw -= dx * s;
       this.goal.pitch = Math.min(this.maxPitch, Math.max(this.minPitch, this.goal.pitch + dy * s));
     });
@@ -112,7 +124,7 @@ export class OrbitCamera {
       'wheel',
       (e) => {
         e.preventDefault();
-        this.dolly(Math.exp(e.deltaY * 0.001));
+        this.dolly(Math.exp(e.deltaY * 0.001 * this.zoomSpeed));
       },
       { passive: false },
     );
@@ -136,7 +148,7 @@ export class OrbitCamera {
 
   update(dt: number, aspect: number): void {
     if (!this.interacting && this.autoRotate) this.goal.yaw += this.autoRotate * dt;
-    const k = 1 - Math.pow(2, -dt / 0.08);
+    const k = this.smoothing > 0 ? 1 - Math.pow(2, -dt / this.smoothing) : 1;
     this.yaw += (this.goal.yaw - this.yaw) * k;
     this.pitch += (this.goal.pitch - this.pitch) * k;
     this.distance += (this.goal.distance - this.distance) * k;
