@@ -9,7 +9,7 @@
 //          holographic laminate (diffraction rainbow + glitter, thin-film sheen).
 //          White printed detail inside the spade: keylines, a ring of dots,
 //          mirrored scrollwork, an eye-in-triangle emblem in holographic foil on a
-//          white plate, and "mk7s" in tiny red type at the centre.
+//          white plate, and "mk7s" in tiny dark-indigo script at the centre.
 //   back:  black marble with a holographic lattice, frame and spade emblem.
 //   edge:  white paper core.
 // Lights: three point lights (two in front, one behind) + studio IBL.
@@ -23,10 +23,10 @@
 @group(0) @binding(3) var lin: sampler;
 @group(0) @binding(4) var emblem_tex: texture_2d<f32>;
 
-// Coverage of the red "mk7s" mark at this pixel. It is written to alpha so the post
-// chain composites its background colour (pure #FF0000) there after tonemapping,
-// keeping the red exact instead of lit, tonemapped and pastel.
-var<private> red_ink: f32 = 0.0;
+// Coverage of the "mk7s" mark at this pixel. It is written to alpha so the post
+// chain composites its background colour (exact dark indigo,
+// #2E1065) there after tonemapping, keeping the colour exact instead of lit and tonemapped.
+var<private> mark_ink: f32 = 0.0;
 
 const SPADE_CENTRE = vec2f(0.0, 0.0);
 const SPADE_SIZE = 0.44;
@@ -278,8 +278,8 @@ fn shade_front(p: vec2f, pos: vec3f, n: vec3f, v: vec3f, aa: f32) -> vec3f {
         black = mix(black, shade_matte(vec3f(0.95), pos, n, v), em.x);
         if (em.y > 0.0) { black = mix(black, shade_holofoil(p, u.emblemRect.xy, pos, n, v, ax, ay), em.y); }
       }
-      // "mk7s": flat pure red, composited in post (see `red_ink`).
-      red_ink = stone * smoothstep(aa, -aa, sd_text_tex(mark_sdf, u.markRect, u.markScalePad, p));
+      // "mk7s": flat dark indigo, composited in post (see `mark_ink`).
+      mark_ink = stone * smoothstep(aa, -aa, sd_text_tex(mark_sdf, u.markRect, u.markScalePad, p));
     }
     c = mix(c, black, stone);
   }
@@ -353,7 +353,7 @@ fn fs_main(fv: FullscreenOut) -> @location(0) vec4f {
   if (coverage <= 0.0) { return vec4f(0.0, 0.0, 0.0, 1.0); }
   let pos = ro + rd * select(closest_t, t, hit);
   let col = shade_card(pos, -rd, footprint);
-  // Premultiplied: alpha < 1 lets the post background (pure red) show through the mark.
-  let a = 1.0 - red_ink * coverage;
+  // Premultiplied: alpha < 1 lets the post background (the mark colour) show through the mark.
+  let a = 1.0 - mark_ink * coverage;
   return vec4f(col * coverage * a, a);
 }

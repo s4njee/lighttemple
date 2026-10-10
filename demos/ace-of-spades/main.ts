@@ -29,8 +29,10 @@ const FOV = (32 * Math.PI) / 180;
 const SERIF = '"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", Georgia, serif';
 // The mark is set in Yesteryear (SIL OFL, bundled), a slanted brush script in the spirit of the Supra badge.
 const SCRIPT = 'Yesteryear, "Brush Script MT", cursive';
-// Pure #FF0000: the mark is composited after tonemapping (see `red_ink` in ace.wgsl).
-const MARK_RED: [number, number, number] = [1, 0, 0];
+// Exact dark indigo: the mark is composited after tonemapping (see `mark_ink` in ace.wgsl).
+const MARK_HEX = 0x2e1065;
+const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const MARK_COLOR = [16, 8, 0].map((shift) => srgbToLinear(((MARK_HEX >> shift) & 0xff) / 255)) as [number, number, number];
 
 declare global {
   interface Window {
@@ -102,7 +104,7 @@ async function main(): Promise<void> {
   const indexPos: [number, number] = [-CARD_HALF[0] + 0.115, CARD_HALF[1] - 0.17];
   const index = place(indexText, indexPos[0], indexPos[1], 0.15, 0.72);
   const indexPip: [number, number] = [indexPos[0], indexPos[1] - 0.17];
-  // The eye emblem takes the club's place in the big spade; tiny red type sits just under it.
+  // The eye emblem takes the club's place in the big spade; tiny indigo type sits just under it.
   const emblemHalfW = 0.21 * 0.44;
   const emblemHalfH = (emblemHalfW * emblemImage.height) / emblemImage.width;
   const emblemRect = [0, 0.27 * 0.44, emblemHalfW, emblemHalfH];
@@ -248,7 +250,7 @@ async function main(): Promise<void> {
     pass.setBindGroup(1, ibl.bindGroup);
     pass.draw(3);
     pass.end();
-    post.render(encoder, surface.currentTexture().createView(), { time, background: MARK_RED });
+    post.render(encoder, surface.currentTexture().createView(), { time, background: MARK_COLOR });
     device.queue.submit([encoder.finish()]);
     window.__ace!.frames++;
   };
