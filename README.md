@@ -8,10 +8,16 @@ See **[plan.md](./plan.md)** for the roadmap (epics, stories, sequencing).
 
 | Experiment | Technique |
 | --- | --- |
-| **Pointer Light** (`#/x/pointer-light-2d`) | 2.5D SDF scene, cursor-following area light, ray-marched soft *and finite* shadows, two coloured lights |
-| **Pointer Light** headline mode | Any text, rendered to a signed distance field at runtime (Canvas 2D + jump flooding), extruded and lit |
+| **Pointer Light** (`#/x/pointer-light-2d`) | 2.5D SDF scene or runtime headline, cursor area light, ray-marched soft *and finite* shadows |
+| **Embossed Card** (`#/x/embossed-card`) | Procedural paper/steel/leather card, letterpress or emboss + foil, parallax occlusion mapping, relief self-shadows |
+| **Holographic Card** (`#/x/holo-card`) | Tilting foil card (pointer or gyro): diffraction grating, thin-film interference, anisotropic GGX |
+| **Glass Panels** (`#/x/glass-panels`) | Draggable frosted glass: bevel refraction, mip-based blur, dispersion, rim light |
+| **Radiance Cascades** (`#/x/radiance-cascades`) | Paint lights and walls: real-time 2D global illumination (bilinear-fix cascades + JFA SDF), with a brute-force reference view |
+| **Long Shadows** (`#/x/long-shadows`) | Flat-design long shadows via exact convex SDF sweeps |
+| **Neon Sign** (`#/x/neon-sign`) | Neon tubes from any text, flicker, emission-pyramid light spill on bump-mapped brick |
+| **Lit Typography** (`#/x/lit-type`) | Editable DOM heading rendered as aligned, ray-marched 3D letters (oblique projection), per-letter metals |
 | **Sun & Soft Shadows** (`#/x/shadow-map-pcf`) | Directional shadow map with hard / PCF / Poisson / PCSS filtering, PBR materials, MSAA or TAA |
-| **Studio Lighting** (`#/x/studio-ibl`) | glTF model lit by image-based lighting (procedural studio/sky or HDRI), soft shadow catcher + contact AO, drag & drop your own `.glb` / `.hdr` |
+| **Studio Lighting** (`#/x/studio-ibl`) | glTF model lit by image-based lighting, soft shadow catcher + contact AO, drag & drop your own `.glb` / `.hdr` |
 
 ## Getting started
 
@@ -40,8 +46,8 @@ src/
   post/          shared HDR post chain (bloom, exposure, tonemapping, vignette, grain) and temporal AA
   ibl/           .hdr loader, environment baking (prefiltered specular, SH9, DFG LUT), IBL shading
   gltf/          minimal glTF 2.0 loader + material shader chunk
-  sdf/           runtime text -> signed distance field (jump flooding)
-  shaders/       shared WGSL chunks: colour & noise, fullscreen triangle, shadow filters, PBR BRDF, SDF primitives
+  sdf/           jump-flood SDFs from any mask; runtime text -> SDF (with per-letter extents and font metrics)
+  shaders/       shared WGSL: colour, noise, SDF primitives, PBR (incl. anisotropic), wave optics, shadow filters
   scene/         orbit camera
   ui/            params panel, pointer tracker, frame stats
   gallery/       router views, experiment host, registry

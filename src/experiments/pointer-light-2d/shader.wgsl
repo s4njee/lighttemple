@@ -86,6 +86,9 @@ fn soft_shadow(p: vec2f, z0: f32, light: vec3f, radius: f32) -> f32 {
     let clearance = max(d, ray_z - u.shapeHeight);
     res = min(res, clearance / (w * t));
     if (res < -1.0) { break; }
+    // Once the ray is above every extrusion, clearance/(w·t) can only grow, so
+    // nothing further along can darken this pixel: shadows cost only their length.
+    if (ray_z > u.shapeHeight) { break; }
     t += clamp(abs(clearance), 0.003, 0.08);
   }
   res = max(res, -1.0);
@@ -125,21 +128,22 @@ fn fs_main(v: FullscreenOut) -> @location(0) vec4f {
   let d = map(p);
   let z = surface_height(d);
 
-  // Normal: flat floor, bevelled sides, flat tops.
+  // Normal: flat floor, bevelled sides, flat tops. The normal is continuous at
+  // the foot of the bevel (smoothstep has zero slope there), so only the
+  // material changes across d = 0; blending it over one pixel anti-aliases the edge.
+  let px = 2.0 / u.resolution.y;
+  let coverage = smoothstep(0.5 * px, -0.5 * px, d);
   var n = vec3f(0.0, 0.0, 1.0);
-  var albedo = u.floorColor.rgb;
-  var shininess = 8.0;
-  var spec_strength = 0.05;
-  if (d < 0.0) {
+  if (d < px) {
     let g = map_grad(p);
     let b = max(u.bevel, 1e-4);
     let x = saturate(-d / b);
     let slope = u.shapeHeight * 6.0 * x * (1.0 - x) / b; // derivative of smoothstep
     n = normalize(vec3f(g * slope, 1.0));
-    albedo = u.shapeColor.rgb;
-    shininess = 48.0;
-    spec_strength = u.shapeColor.a;
   }
+  let albedo = mix(u.floorColor.rgb, u.shapeColor.rgb, coverage);
+  let shininess = mix(8.0, 48.0, coverage);
+  let spec_strength = mix(0.05, u.shapeColor.a, coverage);
 
   var shadow_dbg = 1.0;
   let l0 = Light(u.light0.xyz, u.light0.w, u.light0Color.rgb);
@@ -148,10 +152,12 @@ fn fs_main(v: FullscreenOut) -> @location(0) vec4f {
   col += shade_light(l0, p, z, n, albedo, shininess, spec_strength, &shadow_dbg);
   col += shade_light(l1, p, z, n, albedo, shininess, spec_strength, &shadow_dbg);
 
-  // Contact darkening where the floor meets an extrusion (cheap fake AO).
-  if (d > 0.0) {
-    col *= mix(0.55, 1.0, smoothstep(0.0, max(1.2 * u.shapeHeight, 1e-3), d));
-  }
+  // Contact darkening in the crease where floor meets extrusion (cheap fake AO),
+  // continuous across the edge: the floor fades in with distance, the bevel
+  // foot with height, both reaching 0.55 exactly at d = 0.
+  let floor_ao = smoothstep(0.0, max(1.2 * u.shapeHeight, 1e-3), max(d, 0.0));
+  let bevel_ao = smoothstep(0.0, 0.4, z / max(u.shapeHeight, 1e-4));
+  col *= mix(0.55, 1.0, select(floor_ao, bevel_ao, d < 0.0));
 
   // Visible light bulbs: a small, very bright core that the bloom pass spreads out.
   var lights = array<Light, 2>(l0, l1);

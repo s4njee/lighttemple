@@ -117,9 +117,11 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initial
     }
 
     // Host-level quality controls, shared by every experiment.
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
     const quality = params.add(
       {
-        renderScale: { value: 1, min: 0.25, max: 1, step: 0.05, label: 'Render scale' },
+        // Phones get a lower default: fill-rate is the bottleneck for full-screen lighting.
+        renderScale: { value: coarsePointer ? 0.75 : 1, min: 0.25, max: 1, step: 0.05, label: 'Render scale' },
         maxPixelRatio: { value: 2, options: { '1×': 1, '1.5×': 1.5, '2×': 2, '3×': 3 }, label: 'Max pixel ratio' },
       },
       'Renderer',

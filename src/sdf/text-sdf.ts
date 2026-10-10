@@ -14,7 +14,7 @@
  * rasterise at a larger size.
  */
 
-import jfaWgsl from './jfa.wgsl?raw';
+import { JumpFlood } from './jump-flood';
 
 export interface TextSdfOptions {
   text: string;
@@ -28,39 +28,40 @@ export interface TextSdfOptions {
   padding?: number;
 }
 
+export interface TextSdfLetter {
+  char: string;
+  /** Index into the original string. */
+  index: number;
+  /** Horizontal extent in texels. */
+  start: number;
+  end: number;
+}
+
 export interface TextSdf {
   /** rgba16float, r = signed distance in pixels. */
   texture: GPUTexture;
   width: number;
   height: number;
   padding: number;
+  /** Baseline y in texels. */
+  baseline: number;
+  /** Pen origin x in texels (where fillText started; the DOM's text start). */
+  originX: number;
+  /** Font-wide ascent/descent in texels (CSS line-box metrics, not ink). */
+  fontAscent: number;
+  fontDescent: number;
+  /** Raster font size in px (texels per CSS px = size / CSS font-size). */
+  size: number;
+  /** Non-whitespace letters with their horizontal extents. */
+  letters: TextSdfLetter[];
   destroy(): void;
 }
 
 export class TextSdfGenerator {
-  private readonly layout: GPUBindGroupLayout;
-  private readonly seed: GPUComputePipeline;
-  private readonly flood: GPUComputePipeline;
-  private readonly resolve: GPUComputePipeline;
+  private readonly jfa: JumpFlood;
 
   constructor(private readonly device: GPUDevice) {
-    const C = GPUShaderStage.COMPUTE;
-    this.layout = device.createBindGroupLayout({
-      label: 'jfa',
-      entries: [
-        { binding: 0, visibility: C, texture: { sampleType: 'float' } },
-        { binding: 1, visibility: C, texture: { sampleType: 'unfilterable-float' } },
-        { binding: 2, visibility: C, storageTexture: { access: 'write-only', format: 'rg32float' } },
-        { binding: 3, visibility: C, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-        { binding: 4, visibility: C, buffer: { type: 'uniform' } },
-      ],
-    });
-    const module = device.createShaderModule({ label: 'jfa', code: jfaWgsl });
-    const layout = device.createPipelineLayout({ bindGroupLayouts: [this.layout] });
-    const make = (entryPoint: string) => device.createComputePipeline({ label: `jfa:${entryPoint}`, layout, compute: { module, entryPoint } });
-    this.seed = make('cs_seed');
-    this.flood = make('cs_flood');
-    this.resolve = make('cs_resolve');
+    this.jfa = new JumpFlood(device);
   }
 
   async generate(opts: TextSdfOptions): Promise<TextSdf> {
@@ -86,8 +87,23 @@ export class TextSdfGenerator {
     ctx.font = fontSpec; // resizing resets context state
     ctx.fillStyle = '#fff';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(opts.text, padding + left, padding + Math.ceil(m.actualBoundingBoxAscent));
+    const originX = padding + left;
+    const baseline = padding + Math.ceil(m.actualBoundingBoxAscent);
+    ctx.fillText(opts.text, originX, baseline);
     const { width, height } = canvas;
+
+    // Per-letter horizontal extents (texels), from cumulative advances. Good enough
+    // to give each letter its own material; kerned overlaps split down the middle.
+    const letters: TextSdfLetter[] = [];
+    const chars = [...opts.text];
+    let prefix = '';
+    let x0 = originX;
+    chars.forEach((ch, index) => {
+      prefix += ch;
+      const x1 = originX + ctx.measureText(prefix).width;
+      if (ch.trim()) letters.push({ char: ch, index, start: x0, end: x1 });
+      x0 = x1;
+    });
 
     const d = this.device;
     const mask = d.createTexture({
@@ -97,12 +113,6 @@ export class TextSdfGenerator {
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
     });
     d.queue.copyExternalImageToTexture({ source: canvas }, { texture: mask }, [width, height]);
-
-    // 2. Jump flood.
-    const seedTex = () =>
-      d.createTexture({ size: [width, height], format: 'rg32float', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING });
-    const a = seedTex();
-    const b = seedTex();
     const sdf = d.createTexture({
       label: 'text-sdf',
       size: [width, height],
@@ -110,52 +120,30 @@ export class TextSdfGenerator {
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
     });
 
-    const steps: number[] = [];
-    for (let s = 2 ** Math.floor(Math.log2(Math.max(width, height))); s >= 1; s >>= 1) steps.push(s);
-    // One extra 1-step pass (JFA+1) fixes most of the algorithm's rare misses.
-    steps.push(1);
-    const buffers = [0, ...steps].map((step) => {
-      const buf = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-      d.queue.writeBuffer(buf, 0, new Int32Array([step, 0, 0, 0]));
-      return buf;
-    });
-    const group = (src: GPUTexture, dst: GPUTexture, uniform: GPUBuffer) =>
-      d.createBindGroup({
-        layout: this.layout,
-        entries: [
-          { binding: 0, resource: mask.createView() },
-          { binding: 1, resource: src.createView() },
-          { binding: 2, resource: dst.createView() },
-          { binding: 3, resource: sdf.createView() },
-          { binding: 4, resource: { buffer: uniform } },
-        ],
-      });
-
+    // 2. Jump flood.
     const encoder = d.createCommandEncoder({ label: 'text-sdf' });
-    const wx = Math.ceil(width / 8);
-    const wy = Math.ceil(height / 8);
-    const dispatch = (pipeline: GPUComputePipeline, bg: GPUBindGroup) => {
-      const pass = encoder.beginComputePass();
-      pass.setPipeline(pipeline);
-      pass.setBindGroup(0, bg);
-      pass.dispatchWorkgroups(wx, wy);
-      pass.end();
-    };
-    dispatch(this.seed, group(b, a, buffers[0]));
-    let src = a;
-    let dst = b;
-    steps.forEach((_, i) => {
-      dispatch(this.flood, group(src, dst, buffers[i + 1]));
-      [src, dst] = [dst, src];
-    });
-    dispatch(this.resolve, group(src, dst, buffers[0]));
+    this.jfa.encode(encoder, mask, sdf);
     d.queue.submit([encoder.finish()]);
     await d.queue.onSubmittedWorkDone();
-
     mask.destroy();
-    a.destroy();
-    b.destroy();
-    for (const buf of buffers) buf.destroy();
-    return { texture: sdf, width, height, padding, destroy: () => sdf.destroy() };
+    this.jfa.trim(); // text sizes vary; don't keep scratch around
+
+    return {
+      texture: sdf,
+      width,
+      height,
+      padding,
+      baseline,
+      originX,
+      fontAscent: m.fontBoundingBoxAscent ?? m.actualBoundingBoxAscent,
+      fontDescent: m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent,
+      size,
+      letters,
+      destroy: () => sdf.destroy(),
+    };
+  }
+
+  destroy(): void {
+    this.jfa.destroy();
   }
 }

@@ -79,3 +79,39 @@ fn brdf_ambient(m: Material, n: vec3f, v: vec3f, irradiance: vec3f, specular_rad
   let diffuse = irradiance * m.albedo * (1.0 - m.metallic);
   return diffuse + spec;
 }
+
+// --- Anisotropic GGX (Burley 2012 / Filament) ------------------------------------
+
+fn d_ggx_aniso(noh: f32, toh: f32, boh: f32, at: f32, ab: f32) -> f32 {
+  let a2 = at * ab;
+  let d = vec3f(ab * toh, at * boh, a2 * noh);
+  let d2 = dot(d, d);
+  let b2 = a2 / max(d2, 1e-8);
+  return a2 * b2 * b2 / PI;
+}
+
+fn v_smith_ggx_aniso(at: f32, ab: f32, tov: f32, bov: f32, tol: f32, bol: f32, nov: f32, nol: f32) -> f32 {
+  let lv = nol * length(vec3f(at * tov, ab * bov, nov));
+  let ll = nov * length(vec3f(at * tol, ab * bol, nol));
+  return 0.5 / max(lv + ll, 1e-5);
+}
+
+/// Like brdf_direct, but the specular lobe is stretched along tangent `t`
+/// (anisotropy > 0) or bitangent (< 0): brushed metal, foils, hair.
+fn brdf_direct_aniso(m: Material, n: vec3f, t: vec3f, v: vec3f, l: vec3f, anisotropy: f32) -> vec3f {
+  let nol = saturate(dot(n, l));
+  if (nol <= 0.0) { return vec3f(0.0); }
+  let b = normalize(cross(n, t));
+  let tt = cross(b, n);
+  let h = normalize(v + l);
+  let nov = max(dot(n, v), 1e-4);
+  let a = max(m.roughness * m.roughness, 0.002);
+  let at = max(a * (1.0 + anisotropy), 0.002);
+  let ab = max(a * (1.0 - anisotropy), 0.002);
+  let f0 = material_f0(m);
+  let f = f_schlick(f0, saturate(dot(v, h)));
+  let d = d_ggx_aniso(saturate(dot(n, h)), dot(tt, h), dot(b, h), at, ab);
+  let vis = v_smith_ggx_aniso(at, ab, dot(tt, v), dot(b, v), dot(tt, l), dot(b, l), nov, nol);
+  let kd = (vec3f(1.0) - f) * (1.0 - m.metallic);
+  return (kd * m.albedo / PI + d * vis * f) * nol;
+}

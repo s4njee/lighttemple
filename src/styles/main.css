@@ -256,6 +256,30 @@ h2 {
   margin: 0 0 0.8rem;
 }
 
+/* Lit Typography: real, editable text whose ink is drawn by WebGPU underneath. */
+.lit-type-dom {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(44px, 9.5vw, 150px);
+  line-height: 1;
+  white-space: nowrap;
+  color: transparent;
+  caret-color: #fff;
+  outline: none;
+  cursor: text;
+}
+.lit-type-dom::selection {
+  background: rgba(255, 207, 150, 0.35);
+}
+.lit-type-dom.reveal {
+  color: rgba(255, 40, 40, 0.55);
+}
+
 /* --- Params ------------------------------------------------------------ */
 
 .params-group {

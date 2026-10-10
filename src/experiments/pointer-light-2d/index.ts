@@ -11,6 +11,8 @@ import shaderWgsl from './shader.wgsl?raw';
 
 const create: ExperimentFactory = async (ctx) => {
   const { device, surface: canvas, params, pointer, reducedMotion } = ctx;
+  // Touch-first devices are usually phones/tablets: start with a lighter budget.
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
   const content = params.add(
     {
       scene: { value: 1, options: { Headline: 1, Shapes: 0 } },
@@ -51,7 +53,7 @@ const create: ExperimentFactory = async (ctx) => {
   );
   const debug = params.add(
     {
-      steps: { value: 48, min: 8, max: 128, step: 1, hint: 'Shadow ray-march steps per light.' },
+      steps: { value: coarse ? 32 : 48, min: 8, max: 128, step: 1, hint: 'Max shadow ray-march steps per light (rays also stop once they clear every shape).' },
       view: { value: 0, options: { Lit: 0, 'Shadow mask': 1, 'Distance field': 2, Normals: 3 } },
     },
     'Quality & debug',
@@ -197,6 +199,7 @@ const create: ExperimentFactory = async (ctx) => {
       disposed = true;
       clearTimeout(textTimer);
       textSdf.destroy();
+      textGen.destroy();
       post.destroy();
       uniforms.destroy();
     },

@@ -109,7 +109,7 @@ An experiment is **stable** (vs. **prototype**) when it has:
 - [x] **E1-S3: Temporal accumulation / TAA-lite** (L). `src/post/taa.ts`: Halton(2,3) clip-space jitter, depth-based reprojection (closest depth in 3×3), 9-tap Catmull-Rom history, YCoCg variance clipping, Karis luma-weighted blending, motion-adaptive feedback, `frameNoiseOffset` for per-frame noise rotation. `post.render({ source })` consumes the resolved image. `shadow-map-pcf` has an *Anti-aliasing* switch (MSAA 4× / TAA / Off); with TAA its Poisson/PCSS grain converges to a smooth result.
   *Remaining:* no velocity buffer yet, so animated objects rely on the neighbourhood clip (fine for slow motion, ghosts on fast motion).
 - [x] **E1-S4: PBR material model** (M). `src/shaders/brdf.wgsl`: metal/roughness, GGX + height-correlated Smith + Schlick, Lambert diffuse weighted by (1−F)(1−metallic), and `brdf_ambient` using Karis' analytic split-sum fit so a hemisphere "environment" gives plausible reflections before IBL exists. `shadow-map-pcf` uses it (copper torus, steel pole).
-  *Remaining:* `pointer-light-2d` still uses normalised Blinn-Phong (fine for its matte look); revisit with E2-S2.
+  *Remaining:* `pointer-light-2d` still uses normalised Blinn-Phong (fine for its matte look); the newer E2 experiments use the shared BRDF.
 - [x] **E1-S5: Image-based lighting** (M). `src/ibl/`: Radiance `.hdr` (RGBE, RLE) decoder + float16 upload; procedural *studio* (softboxes) and *sky* (sun + gradient) environments; bake to a 512² env cube with mips → GGX-prefiltered specular cube (7 roughness mips, filtered importance sampling) → SH9 irradiance (one compute workgroup, read back to estimate the dominant light direction) → split-sum DFG LUT. `ibl.wgsl` shading includes multiple-scattering energy compensation. Bind group 1 by convention. Rendered by fragment passes (one face/mip per pass) rather than compute, which keeps it on core-only formats.
 - [x] **E1-S6: glTF loader (minimal)** (M). `src/gltf/`: `.glb`/`.gltf` (data URIs or relative files), node hierarchies (matrix/TRS), triangle primitives with float or normalized-int attributes, generated normals when missing, metal/roughness materials with base colour, metal-rough, normal, occlusion and emissive textures (sRGB formats where required, mipmaps via `src/gpu/mipmaps.ts`), per-texture samplers, alpha MASK. Normal mapping uses supplied tangents, else a derivative-based cotangent frame. No skinning, morphs, animation or extensions (BLEND renders opaque).
 - [x] **E1-S7: Render-target pool** (S). `src/gpu/targets.ts`: `TargetPool.get(name, { size, format, scale?, sampleCount? })` recreates a target only when its description changes. Used by the post chain (scene + bloom levels) and the shadow experiment (MSAA colour/depth).
@@ -120,17 +120,17 @@ An experiment is **stable** (vs. **prototype**) when it has:
 
 > The most directly "website-native" category: lights that react to the cursor, scroll and UI, lighting flat or nearly flat content.
 
-- [~] **E2-S1: Pointer light with SDF soft shadows** (M). *Prototype done:* `pointer-light-2d`. Extruded SDF shapes with bevel normals, ray-marched soft and finite shadows, two lights, debug views.
-  *Remaining:* fix faint dashed artefacts along bevel rims at grazing angles; cap steps by shadow length for perf; mobile-friendly defaults.
-- [ ] **E2-S2: Normal-mapped surfaces** (M). Cursor light over embossed paper, brushed metal and leather textures (tangent-space normal + roughness maps), with parallax occlusion mapping for depth.
-  *AC:* A "business card" demo that looks physically embossed under a moving light.
-- [~] **E2-S3: Lit typography** (M). *Started:* `pointer-light-2d` → Scene: Headline extrudes runtime text (E1-S9) with bevels, soft self-shadowing and finite shadows. *Remaining:* a dedicated experiment with per-letter materials, layout from real DOM text, and a 3D extruded (`op_extrude`) variant.
-- [ ] **E2-S4: Holographic / foil cards** (M). Pointer- or gyro-driven specular sheen with thin-film interference and anisotropic highlights. Classic "trading card" effect, done physically.
-- [ ] **E2-S5: Glass panels** (M). Frosted-glass UI cards with refraction of the lit background, edge highlights, a dispersion fringe, and light-catching bevels.
-- [ ] **E2-S6: 2D radiance cascades GI** (L). Emissive shapes light a 2D scene with correct soft shadows and colour bleeding, the modern way (Sannikov's radiance cascades). Paint lights with the cursor.
-  *AC:* ≥ 60 fps at 1080p on integrated GPU with 4–5 cascades.
-- [ ] **E2-S7: Long-shadow / flat-design lighting** (S). Infinite directional "long shadows" for icons/logos via SDF sweep, matching flat UI aesthetics.
-- [ ] **E2-S8: Neon & emissive signage** (S). Emissive SDF strokes with bloom, flicker and wall spill lighting. Depends on E1-S2.
+- [x] **E2-S1: Pointer light with SDF soft shadows** (M). `pointer-light-2d`: extruded SDF shapes or a runtime headline, bevel normals, ray-marched soft *and finite* shadows, two lights, debug views. Finished: one-pixel material blend + continuous crease occlusion remove the aliased "dashed" rims; shadow rays stop once they climb above every shape, so cost scales with shadow length; touch devices default to fewer steps, and the host defaults to 0.75 render scale on coarse pointers.
+- [x] **E2-S2: Normal-mapped surfaces** (M). `embossed-card`: a business card in cotton paper (letterpress + ink), brushed steel, pebbled leather (+ gold foil) or matte stock, all procedural (`src/shaders/noise.wgsl`). A baked height field (text SDFs, border, logo pressed into material microstructure) is ray-cast with parallax occlusion mapping (linear search + secant refinement), normals from the height gradient, relief self-shadows toward the cursor light, studio IBL for metals, and an analytic desk shadow.
+  *AC met:* reads as physically debossed/embossed at an angle under a moving light.
+- [x] **E2-S3: Lit typography** (M). `lit-type`: a real `contenteditable` DOM heading (transparent ink, selectable, accessible) rendered underneath as ray-marched extruded letters from its *own computed font*. An oblique projection keeps the front faces locked to the DOM glyphs while the pointer reveals the sides. Per-character DOM `Range` rects correct each letter's position (rounding/kerning), per-letter materials (alternating metals / hues / gold), soft SDF shadows, SDF AO, IBL. `pointer-light-2d` keeps a 2.5D headline mode.
+- [x] **E2-S4: Holographic / foil cards** (M). `holo-card`: spring-driven tilt from pointer or device orientation (with the iOS permission flow). Foil = diffraction grating (concentric grooves + random-orientation glitter flecks, grating equation over 3 orders → `spectral_rgb`), thin-film interference tint, and radially-brushed anisotropic GGX (`brdf_direct_aniso`), under a printed, laminated (clearcoat) artwork layer. Shared wave-optics in `src/shaders/optics.wgsl`.
+- [x] **E2-S5: Glass panels** (M). `glass-panels`: lit background (blobs, grid, headline, soft drop shadows cast away from the cursor) → HDR mip chain. Draggable panels with circular-bevel normals, screen-space refraction along the tilt, RGB dispersion, 8-tap frosted blur one mip below the target, cursor glints, Fresnel rim and hairline, SDF "UI" content.
+  *Limitation:* panels refract the background only, not other panels behind them.
+- [x] **E2-S6: 2D radiance cascades GI** (L). `radiance-cascades`: paint lights/walls/erase, cursor lamp. Generic `JumpFlood` (`src/sdf/jump-flood.ts`) SDF of the scene. ~6 cascades (spacing 2ⁿ, 4ⁿ⁺¹ directions, 4× intervals) traced and merged top-down with the **bilinear fix**, sky term on the top cascade, fluence from cascade 0. A "Reference (64 rays)" view brute-forces the same field; the cascade result matched it to a few hundredths along measured scanlines.
+  *AC:* the 60 fps @1080p check needs a real integrated GPU (E9-S3). Half-res GI is the default.
+- [x] **E2-S7: Long-shadow / flat-design lighting** (S). `long-shadows`: letter tiles spell a word. Tile shadows are the *exact* sweep of a convex shape (ternary search over a convex distance function), so they're crisp and anti-aliased at any length. Glyph shadows, clipped to their tile, use dense uniform sampling. Light angle follows the pointer, and tonemapping is off for exact brand colours.
+- [x] **E2-S8: Neon & emissive signage** (S). `neon-sign`: tubes from the text SDF (outline or solid), frame and moon icon. White-hot cores, glass highlights when unlit, mounting shadow. Half-res emission mip pyramid summed for ~1/r wall spill + gradient-derived light direction for bump-shaded brick/concrete. Per-letter flicker with one faulty letter (off under reduced motion).
 
 ### E3: Real-time shadows
 
@@ -224,10 +224,11 @@ An experiment is **stable** (vs. **prototype**) when it has:
 ## 5. Suggested sequencing
 
 1. **Milestone 1: Foundation** *(done)*. All of E0 and E1.
+   **Interface lighting** *(done)*. All of E2: 10 experiments live.
 2. **Milestone 2: Ship the gallery.** E10-S1, E10-S2, E9-S1. The site is public, tested and easy to extend.
-3. **Milestone 3: Web-native lighting.** E2-S2, E2-S4, E8-S1, E3-S8 (on top of the finished E1-S1/S2). These are the most immediately useful for real websites.
+3. **Milestone 3: Web-native lighting.** E8-S1, E8-S2, E3-S8 (on top of E1 and E2). These are the most immediately useful for real websites.
 4. **Milestone 4: Shadow reference.** E3-S1 (finish), E3-S2, E3-S3, E3-S5, E3-S6, E9-S2, E9-S3.
-5. **Milestone 5: Atmosphere & GI.** E5-S1, E5-S2, E4-S1, E4-S2, E2-S6 (all can lean on E1-S3 TAA and E1-S5 IBL).
+5. **Milestone 5: Atmosphere & GI.** E5-S1, E5-S2, E4-S1, E4-S2 (all can lean on E1-S3 TAA and E1-S5 IBL).
 6. **Milestone 6: Style & scale.** E6-*, E7-S1, E7-S2, E8-S4.
 
 ## 6. Open questions
