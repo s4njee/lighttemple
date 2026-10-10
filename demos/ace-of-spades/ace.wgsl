@@ -9,7 +9,7 @@
 //          holographic laminate (diffraction rainbow + glitter, thin-film sheen).
 //          White printed detail inside the spade: keylines, a ring of dots,
 //          mirrored scrollwork, an eye-in-triangle emblem in holographic foil on a
-//          white plate, and "mk7s" in tiny dark-indigo script at the centre.
+//          white plate, and "mk7s" in tiny dark-indigo script outlined in white at the centre.
 //   back:  black marble with a holographic lattice, frame and spade emblem.
 //   edge:  white paper core.
 // Lights: three point lights (two in front, one behind) + studio IBL.
@@ -278,8 +278,12 @@ fn shade_front(p: vec2f, pos: vec3f, n: vec3f, v: vec3f, aa: f32) -> vec3f {
         black = mix(black, shade_matte(vec3f(0.95), pos, n, v), em.x);
         if (em.y > 0.0) { black = mix(black, shade_holofoil(p, u.emblemRect.xy, pos, n, v, ax, ay), em.y); }
       }
-      // "mk7s": flat dark indigo, composited in post (see `mark_ink`).
-      mark_ink = stone * smoothstep(aa, -aa, sd_text_tex(mark_sdf, u.markRect, u.markScalePad, p));
+      // "mk7s": flat dark indigo, composited in post (see `mark_ink`), with a thin
+      // white outline printed around it so it stands off the dark marble.
+      let mark_d = sd_text_tex(mark_sdf, u.markRect, u.markScalePad, p);
+      let outline = smoothstep(aa, -aa, mark_d - 0.0011);
+      if (outline > 0.0) { black = mix(black, shade_matte(vec3f(0.95), pos, n, v), outline); }
+      mark_ink = stone * smoothstep(aa, -aa, mark_d);
     }
     c = mix(c, black, stone);
   }
