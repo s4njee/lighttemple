@@ -14,6 +14,9 @@ export interface OrbitCameraOptions {
   near?: number;
   far?: number;
   minDistance?: number;
+  /** Pitch limits in radians (default -0.2 .. 1.45, i.e. mostly above the ground). */
+  minPitch?: number;
+  maxPitch?: number;
   maxDistance?: number;
 }
 
@@ -26,6 +29,8 @@ export class OrbitCamera {
   near: number;
   far: number;
   minDistance: number;
+  minPitch: number;
+  maxPitch: number;
   maxDistance: number;
   /** Radians/sec of idle auto-rotation; 0 to disable. */
   autoRotate = 0;
@@ -53,6 +58,8 @@ export class OrbitCamera {
     this.near = o.near ?? 0.1;
     this.far = o.far ?? 100;
     this.minDistance = o.minDistance ?? 1;
+    this.minPitch = o.minPitch ?? -0.2;
+    this.maxPitch = o.maxPitch ?? 1.45;
     this.maxDistance = o.maxDistance ?? 30;
     this.goal = { yaw: this.yaw, pitch: this.pitch, distance: this.distance };
     this.attach();
@@ -92,7 +99,7 @@ export class OrbitCamera {
       this.dragging.y = e.clientY;
       const s = 4 / Math.max(200, el.clientHeight);
       this.goal.yaw -= dx * s;
-      this.goal.pitch = Math.min(1.45, Math.max(-0.2, this.goal.pitch + dy * s));
+      this.goal.pitch = Math.min(this.maxPitch, Math.max(this.minPitch, this.goal.pitch + dy * s));
     });
     const end = (e: PointerEvent) => {
       this.pointers.delete(e.pointerId);

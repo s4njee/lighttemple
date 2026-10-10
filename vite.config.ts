@@ -31,5 +31,12 @@ export default defineConfig({
   plugins: [experimentHotSwap()],
   build: {
     target: 'es2022',
+    rollupOptions: {
+      // Multi-page: the gallery plus standalone demo sites built on the same engine.
+      input: {
+        gallery: 'index.html',
+        'ace-of-spades': 'demos/ace-of-spades/index.html',
+      },
+    },
   },
 });

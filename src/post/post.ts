@@ -15,7 +15,7 @@
 
 import commonWgsl from '../shaders/common.wgsl?raw';
 import fullscreenWgsl from '../shaders/fullscreen.wgsl?raw';
-import type { ExperimentContext } from '../experiments/types';
+import type { ParamsPanel } from '../ui/params';
 import { createShader, wgsl } from '../gpu/shader';
 import { TargetPool, type Target } from '../gpu/targets';
 import { UniformBlock } from '../gpu/uniforms';
@@ -93,7 +93,11 @@ export class PostProcess {
     });
   }
 
-  static async create(ctx: ExperimentContext, defaults: PostDefaults = {}): Promise<PostProcess> {
+  /**
+   * `params` is optional: inside the gallery the standard "Post" group is added to
+   * the panel; standalone pages (e.g. demos/) get fixed settings from `defaults`.
+   */
+  static async create(ctx: PostContext, defaults: PostDefaults = {}): Promise<PostProcess> {
     const { device, format } = ctx;
     const settings = addParams(ctx, defaults);
     const uniforms = new UniformBlock(device, 'Post', POST_UNIFORMS);
@@ -230,7 +234,23 @@ const POST_UNIFORMS = {
   background: 'vec3f',
 } as const;
 
-function addParams(ctx: ExperimentContext, d: PostDefaults) {
+export interface PostContext {
+  device: GPUDevice;
+  format: GPUTextureFormat;
+  params?: ParamsPanel;
+}
+
+function addParams(ctx: PostContext, d: PostDefaults) {
+  if (!ctx.params) {
+    return {
+      exposure: d.exposure ?? 1,
+      tonemap: d.tonemap ?? TONEMAP.AgX,
+      bloom: d.bloom ?? 0.04,
+      bloomRadius: d.bloomRadius ?? 1,
+      vignette: d.vignette ?? 0.25,
+      grain: d.grain ?? 0.03,
+    };
+  }
   return ctx.params.add(
     {
       exposure: { value: d.exposure ?? 1, min: 0.05, max: 4, step: 0.01 },
