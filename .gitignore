@@ -1,7 +1,7 @@
 node_modules/
 dist/
-lib/
-types/
+/lib/
+/types/
 .smoke/
 *.log
 .DS_Store
