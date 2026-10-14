@@ -40,6 +40,12 @@ export interface MountExperimentOptions {
   reducedMotion?: boolean;
   /** Start playing the render loop. Default true. */
   playing?: boolean;
+  /**
+   * Configure the canvas with `alphaMode: 'premultiplied'` so the page behind it shows through
+   * wherever the experiment writes alpha < 1 (its post chain switches to premultiplied output).
+   * Default false; `mountMeta` defaults it to the experiment's `meta.transparent`.
+   */
+  transparent?: boolean;
 }
 
 export interface ExperimentHandle {
@@ -58,7 +64,8 @@ export async function mountExperiment(
   options: MountExperimentOptions = {},
 ): Promise<ExperimentHandle> {
   const gpu = await getGpu(() => {});
-  const surface = new Surface(canvas, gpu.device, gpu.presentationFormat);
+  const transparent = options.transparent ?? false;
+  const surface = new Surface(canvas, gpu.device, gpu.presentationFormat, transparent ? { alphaMode: 'premultiplied' } : {});
   const pointer = new PointerTracker(canvas);
   const params: ParamSink = options.sink ?? new HeadlessParams(options.params);
   const reducedMotion =
@@ -73,6 +80,7 @@ export async function mountExperiment(
       params,
       pointer: pointer.state,
       reducedMotion,
+      ...(transparent ? { transparent } : {}),
     }),
   );
 
@@ -132,7 +140,7 @@ export async function mountMeta(
   options: MountExperimentOptions = {},
 ): Promise<ExperimentHandle> {
   const { default: factory } = await meta.load();
-  return mountExperiment(canvas, factory, options);
+  return mountExperiment(canvas, factory, { ...options, transparent: options.transparent ?? meta.transparent });
 }
 
 export interface TargetExperimentOptions {
@@ -154,6 +162,11 @@ export interface TargetExperimentOptions {
   pointer?: Readonly<PointerState>;
   /** A full GPU context, for experiments that read `ctx.gpu`. */
   gpu?: GpuContext;
+  /**
+   * The caller blends the target over its page as premultiplied colour, so the experiment should
+   * write premultiplied alpha rather than an opaque frame. Default false.
+   */
+  transparent?: boolean;
 }
 
 export interface TargetExperiment {
@@ -203,6 +216,7 @@ export async function createTargetExperiment(
       params,
       pointer: options.pointer ?? NEUTRAL_POINTER,
       reducedMotion: options.reducedMotion ?? false,
+      ...(options.transparent ? { transparent: true } : {}),
     }),
   );
 

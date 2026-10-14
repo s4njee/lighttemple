@@ -31,7 +31,13 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initial
 
   const canvas = h('canvas', { class: 'stage-canvas', 'aria-label': `${meta.title}, interactive WebGPU canvas` });
   const errorBox = h('div', { class: 'stage-error', hidden: '' });
-  const stage = h('div', { class: 'stage' }, canvas, errorBox);
+  // Transparent experiments draw over live HTML: an empty backdrop element sits behind the canvas
+  // for the experiment to fill. Opaque experiments get exactly the markup they always had.
+  const transparent = meta.transparent ?? false;
+  const backdrop = transparent ? h('div', { class: 'stage-backdrop' }) : null;
+  const stage = backdrop
+    ? h('div', { class: 'stage stage-transparent' }, backdrop, canvas, errorBox)
+    : h('div', { class: 'stage' }, canvas, errorBox);
   const panelBody = h('div', { class: 'panel-params' });
   const notes = h(
     'section',
@@ -86,7 +92,7 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initial
     });
     if (disposed) return;
 
-    const surface = new Surface(canvas, gpu.device, gpu.presentationFormat);
+    const surface = new Surface(canvas, gpu.device, gpu.presentationFormat, transparent ? { alphaMode: 'premultiplied' } : {});
     cleanups.push(() => surface.destroy());
     const pointer = new PointerTracker(canvas);
     cleanups.push(() => pointer.destroy());
@@ -108,6 +114,7 @@ export function mountExperiment(root: HTMLElement, meta: ExperimentMeta, initial
         params,
         pointer: pointer.state,
         reducedMotion,
+        ...(backdrop ? { transparent: true, backdrop } : {}),
       }),
     );
     cleanups.unshift(() => experiment.dispose());

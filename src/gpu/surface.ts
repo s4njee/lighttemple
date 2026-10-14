@@ -20,6 +20,10 @@ export interface SurfaceOptions {
   maxPixelRatio?: number;
   /** Extra multiplier on top of the pixel ratio (adaptive-quality hook). */
   renderScale?: number;
+  /**
+   * 'opaque' (default) ignores the alpha channel. 'premultiplied' lets the canvas show the page
+   * behind it: every pixel must then hold premultiplied colour (rgb <= alpha).
+   */
   alphaMode?: GPUCanvasAlphaMode;
 }
 
@@ -41,6 +45,7 @@ export class Surface implements RenderSurface {
   size: SurfaceSize = { width: 1, height: 1, cssWidth: 1, cssHeight: 1, pixelRatio: 1 };
   maxPixelRatio: number;
   renderScale: number;
+  readonly alphaMode: GPUCanvasAlphaMode;
 
   private observer: ResizeObserver;
   private devicePixels: { w: number; h: number } | null = null;
@@ -57,7 +62,8 @@ export class Surface implements RenderSurface {
     const ctx = canvas.getContext('webgpu');
     if (!ctx) throw new Error('Could not get a WebGPU canvas context.');
     this.context = ctx;
-    this.context.configure({ device, format, alphaMode: options.alphaMode ?? 'opaque' });
+    this.alphaMode = options.alphaMode ?? 'opaque';
+    this.context.configure({ device, format, alphaMode: this.alphaMode });
 
     this.observer = new ResizeObserver((entries) => {
       const entry = entries[entries.length - 1];
