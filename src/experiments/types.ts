@@ -6,14 +6,14 @@
  */
 
 import type { GpuContext } from '../gpu/context';
-import type { Surface, SurfaceSize } from '../gpu/surface';
+import type { RenderSurface, SurfaceSize } from '../gpu/surface';
 import type { ParamSink } from '../ui/params';
 import type { PointerState } from '../ui/pointer';
 
 export interface ExperimentContext {
   gpu: GpuContext;
   device: GPUDevice;
-  surface: Surface;
+  surface: RenderSurface;
   /** Swapchain format; render final output to `surface.currentTexture()`. */
   format: GPUTextureFormat;
   params: ParamSink;

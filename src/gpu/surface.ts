@@ -23,7 +23,20 @@ export interface SurfaceOptions {
   alphaMode?: GPUCanvasAlphaMode;
 }
 
-export class Surface {
+/**
+ * What an experiment needs from the surface it draws into: a canvas (some read `surface.canvas`),
+ * a size, and the texture to render the final image to. `Surface` owns a canvas swapchain, but a
+ * host that renders into its own target (e.g. a HoloGPU `render(frame, encoder, target)`) supplies
+ * a `TargetSurface` instead, so an experiment never has to know who owns the frame.
+ */
+export interface RenderSurface {
+  readonly canvas: HTMLCanvasElement;
+  size: SurfaceSize;
+  currentTexture(): GPUTexture;
+  onResize(listener: (size: SurfaceSize) => void): () => void;
+}
+
+export class Surface implements RenderSurface {
   readonly context: GPUCanvasContext;
   size: SurfaceSize = { width: 1, height: 1, cssWidth: 1, cssHeight: 1, pixelRatio: 1 };
   maxPixelRatio: number;
