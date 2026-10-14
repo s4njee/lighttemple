@@ -25,6 +25,8 @@ This document is the roadmap. It is organised as **epics → stories**, each sto
 - WebGL fallbacks for every experiment. A static poster/video fallback is enough (see E8-S6).
 - Photoreal offline-quality GI. We care about believable and fast.
 
+Publication and a shared effect contract are now planned rather than ruled out; see M3 and M4 in the [holofx backlog](../holofx/backlog.md).
+
 ## 2. Technical decisions
 
 | Area | Decision | Why |

@@ -21,14 +21,15 @@ import { OrbitCamera } from '../../src/scene/orbit-camera';
 import { TextSdfGenerator, type TextSdf } from '../../src/sdf/text-sdf';
 import aceWgsl from './ace.wgsl?raw';
 import emblemUrl from './eye-emblem.png';
-import scriptUrl from './fonts/yesteryear-latin.woff2';
+import scriptUrl from './fonts/ace-script-latin.woff2';
 
 const CARD_HALF: [number, number] = [0.63, 0.88];
 const FOV = (32 * Math.PI) / 180;
 // Playing-card indices are a condensed Roman; a regular serif squeezed horizontally reads the same.
 const SERIF = '"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", Georgia, serif';
-// The mark is set in Yesteryear (SIL OFL, bundled), a slanted brush script in the spirit of the Supra badge.
-const SCRIPT = 'Yesteryear, "Brush Script MT", cursive';
+// The mark is set in a subset of Yesteryear (SIL OFL, bundled). The subset is a Modified
+// Version, so the OFL reserved name is dropped: the family is renamed "Ace Script".
+const SCRIPT = '"Ace Script", "Brush Script MT", cursive';
 // Exact dark indigo: the mark is composited after tonemapping (see `mark_ink` in ace.wgsl).
 const MARK_HEX = 0x2e1065;
 const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
@@ -79,9 +80,9 @@ async function main(): Promise<void> {
   try {
     // Loaded from bytes so it works under strict font-src policies too.
     const script = await (await fetch(scriptUrl)).arrayBuffer();
-    document.fonts.add(await new FontFace('Yesteryear', script).load());
+    document.fonts.add(await new FontFace('Ace Script', script).load());
   } catch (err) {
-    console.warn('Yesteryear failed to load; using a fallback script.', err);
+    console.warn('Ace Script failed to load; using a fallback script.', err);
   }
   const [indexText, markText, emblemImage] = await Promise.all([
     textGen.generate({ text: 'A', family: SERIF, weight: 400, size: 220 }),

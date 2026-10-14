@@ -2,6 +2,11 @@
 
 An experimental gallery of practical **WebGPU lighting and shadow** effects for building aesthetic websites. Each experiment is live and tweakable, with notes on how it works and what it costs.
 
+Part of the [holofx collection](https://github.com/s4njee/holofx) alongside
+[hologpu](https://github.com/s4njee/hologpu),
+[firetemple](https://github.com/s4njee/firetemple) and
+[watertemple](https://github.com/s4njee/watertemple).
+
 See **[plan.md](./plan.md)** for the roadmap (epics, stories, sequencing).
 
 ## Experiments
@@ -57,3 +62,8 @@ scripts/smoke.mjs           headless render test
 scripts/capture.mjs         screenshot arbitrary gallery states
 scripts/new-experiment.mjs  experiment generator
 ```
+
+## Licence
+
+MIT. See [LICENSE](./LICENSE). Third-party assets are credited in
+[public/assets/CREDITS.md](./public/assets/CREDITS.md).
