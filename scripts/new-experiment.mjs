@@ -47,7 +47,7 @@ import fullscreenWgsl from '../../shaders/fullscreen.wgsl?raw';
 import { createShader, wgsl } from '../../gpu/shader';
 import { UniformBlock } from '../../gpu/uniforms';
 import { HDR_FORMAT, PostProcess } from '../../post/post';
-import { hexToLinear } from '../../ui/params';
+import { hexToLinear } from '../../gpu/color';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 

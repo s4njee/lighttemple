@@ -6,13 +6,17 @@
  * Screenshots land in .smoke/ for eyeballing.
  *
  *   npm run smoke                 # build + test
+ *   npm run smoke -- --only shadow-map-pcf,studio-ibl   # just these experiments
  *   CHROMIUM_PATH=/path/to/chrome npm run smoke
  */
 
 import { mkdir } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 
+const { values: args } = parseArgs({ options: { only: { type: 'string' } } });
+const only = args.only ? new Set(args.only.split(',').map((s) => s.trim()).filter(Boolean)) : null;
 const OUT = '.smoke';
 const FRAMES = 8;
 const TIMEOUT_MS = 60_000;
@@ -43,7 +47,14 @@ try {
 
   await page.goto(base);
   await page.waitForSelector('.card');
-  const slugs = await page.$$eval('a.card', (as) => as.map((a) => a.getAttribute('href').replace('#/x/', '')));
+  const all = await page.$$eval('a.card', (as) => as.map((a) => a.getAttribute('href').replace('#/x/', '')));
+  const slugs = only ? all.filter((s) => only.has(s)) : all;
+  for (const s of only ?? []) {
+    if (!all.includes(s)) {
+      failures++;
+      console.log(`FAIL ${s} (not in the gallery)`);
+    }
+  }
   await page.screenshot({ path: `${OUT}/index.png` });
   console.log(`index: ${slugs.length} experiments`);
 
