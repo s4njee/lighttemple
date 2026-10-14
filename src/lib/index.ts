@@ -34,6 +34,8 @@ const MAX_DT = 1 / 20;
 export interface MountExperimentOptions {
   /** Initial parameter overrides (e.g. decoded from a URL). */
   params?: URLSearchParams;
+  /** Declare into this sink instead of a headless one, e.g. to attach a live parameter panel. */
+  sink?: ParamSink;
   /** Defaults to the visitor's `prefers-reduced-motion`. */
   reducedMotion?: boolean;
   /** Start playing the render loop. Default true. */
@@ -42,8 +44,8 @@ export interface MountExperimentOptions {
 
 export interface ExperimentHandle {
   readonly canvas: HTMLCanvasElement;
-  /** The declared parameter groups and their live values. */
-  readonly params: HeadlessParams;
+  /** The parameter sink the experiment declared into (a `HeadlessParams` unless one was given). */
+  readonly params: ParamSink;
   pause(): void;
   resume(): void;
   dispose(): void;
@@ -58,7 +60,7 @@ export async function mountExperiment(
   const gpu = await getGpu(() => {});
   const surface = new Surface(canvas, gpu.device, gpu.presentationFormat);
   const pointer = new PointerTracker(canvas);
-  const params = new HeadlessParams(options.params);
+  const params: ParamSink = options.sink ?? new HeadlessParams(options.params);
   const reducedMotion =
     options.reducedMotion ?? window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
