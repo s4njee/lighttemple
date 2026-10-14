@@ -20,6 +20,19 @@ export interface ExperimentContext {
   pointer: Readonly<PointerState>;
   /** The user prefers reduced motion; keep ambient animation subtle or static. */
   reducedMotion: boolean;
+  /**
+   * The output is composited over the page by the browser (a canvas configured with
+   * `alphaMode: 'premultiplied'`, or a host target that is blended): write premultiplied alpha,
+   * where alpha 0 shows the HTML behind. `PostProcess.create(ctx)` picks this up and switches its
+   * output to premultiplied. Absent/false for every opaque host.
+   */
+  transparent?: boolean;
+  /**
+   * Gallery only, for `ExperimentMeta.transparent` experiments: an empty element *behind* the
+   * transparent canvas that the experiment may fill with live HTML to demonstrate against.
+   * Library hosts leave it undefined; their own page shows through instead.
+   */
+  backdrop?: HTMLElement;
 }
 
 export interface FrameInfo {
@@ -64,5 +77,11 @@ export interface ExperimentMeta {
   /** Short CSS background for the gallery card until real thumbnails exist. */
   cardBackground: string;
   status: 'prototype' | 'stable';
+  /**
+   * Render on a transparent canvas (`alphaMode: 'premultiplied'`) over live HTML: the gallery
+   * hands the experiment `transparent: true` and a `backdrop` element behind the canvas. Default
+   * false: an opaque canvas, exactly as before.
+   */
+  transparent?: boolean;
   load: () => Promise<{ default: ExperimentFactory }>;
 }

@@ -180,6 +180,20 @@ h2 {
   touch-action: none;
 }
 
+/* Transparent canvas over live HTML (ExperimentMeta.transparent): the experiment fills the
+   backdrop; the canvas, positioned so it stacks above it, lets it show through. */
+.stage-transparent {
+  background: none;
+}
+.stage-transparent .stage-canvas {
+  position: relative;
+}
+.stage-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
 .stats {
   position: absolute;
   left: 12px;
@@ -278,6 +292,72 @@ h2 {
 }
 .lit-type-dom.reveal {
   color: rgba(255, 40, 40, 0.55);
+}
+
+/* Shadow Catcher: the live HTML page behind its transparent canvas. */
+.catcher-page {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  padding: clamp(1.5rem, 5vw, 4rem) clamp(1.25rem, 7%, 5rem);
+  color: #2a231e;
+  background:
+    radial-gradient(110% 80% at 88% 10%, #ffdcb8 0%, rgba(255, 220, 184, 0) 55%),
+    radial-gradient(90% 70% at 10% 100%, #cfd9f0 0%, rgba(207, 217, 240, 0) 60%),
+    linear-gradient(140deg, #f6efe5 0%, #efdcc9 45%, #dccbe6 100%);
+}
+.catcher-page[data-variant='dark'] {
+  color: #ece4ef;
+  background:
+    radial-gradient(100% 80% at 85% 15%, #4b3557 0%, rgba(75, 53, 87, 0) 60%),
+    linear-gradient(160deg, #1c1922 0%, #2a2131 55%, #3a2a2c 100%);
+}
+.catcher-page[data-variant='checker'] {
+  color: #1d1d1d;
+  background: repeating-conic-gradient(#c9c9c9 0 25%, #f3f3f3 0 50%) 0 0 / 32px 32px;
+}
+.catcher-article {
+  max-width: 38rem;
+}
+.catcher-eyebrow {
+  margin: 0 0 0.8rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.catcher-title {
+  font-size: clamp(2.1rem, 4.4vw, 3.7rem);
+  line-height: 1.04;
+  margin: 0 0 1.1rem;
+}
+.catcher-lede {
+  font-size: 1.08rem;
+  margin: 0 0 0.9rem;
+}
+.catcher-body {
+  margin: 0 0 1.3rem;
+  opacity: 0.8;
+}
+.catcher-link {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+.catcher-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  cursor: grab;
+}
+.catcher-handle:active {
+  cursor: grabbing;
 }
 
 /* --- Params ------------------------------------------------------------ */

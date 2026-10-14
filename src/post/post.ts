@@ -11,6 +11,10 @@
  *   // per frame:
  *   const hdr = post.scene(size);            // render into hdr.view
  *   post.render(encoder, swapchainView, { time });
+ *
+ * On a transparent canvas (`ctx.transparent`, `alphaMode: 'premultiplied'`) the
+ * final pass writes premultiplied alpha instead of compositing over a colour,
+ * so the scene's alpha lets the HTML behind the canvas show through.
  */
 
 import commonWgsl from '../shaders/common.wgsl?raw';
@@ -52,6 +56,22 @@ export interface PostRenderOptions {
    * the output of TemporalAA.resolve().
    */
   source?: GPUTexture;
+  /**
+   * 'opaque' composites over `background` and writes alpha 1. 'premultiplied' writes
+   * premultiplied alpha for a canvas configured with `alphaMode: 'premultiplied'` over live
+   * HTML (`background` is then ignored): opaque content stays opaque, a black shadow becomes
+   * alpha = darkness, and colour never exceeds alpha. Defaults to 'premultiplied' when the
+   * context passed to `create()` is transparent, else 'opaque'.
+   */
+  output?: 'opaque' | 'premultiplied';
+  /**
+   * How 'premultiplied' alpha is written. Browsers blend canvases in sRGB space. 'linear'
+   * (default) remaps the alpha of dark pixels as 1 - (1 - a)^(1/2.2), so semi-transparent black
+   * (a shadow) darkens the page by what the opaque path's linear-light blend would; bright pixels
+   * keep their coverage. 'coverage' writes the scene alpha unchanged, the plain CSS behaviour
+   * (shadows come out darker, with harder-looking edges).
+   */
+  alphaBlend?: 'linear' | 'coverage';
 }
 
 export class PostProcess {
@@ -64,6 +84,7 @@ export class PostProcess {
     WeakMap<GPUTexture, { bloom: GPUTexture | undefined; group: GPUBindGroup }>
   >();
   private sceneTarget: Target | null = null;
+  private premultiplied: GPURenderPipeline | null;
 
   private constructor(
     private readonly device: GPUDevice,
@@ -75,7 +96,12 @@ export class PostProcess {
       up: GPURenderPipeline;
       composite: GPURenderPipeline;
     },
+    private readonly module: GPUShaderModule,
+    private readonly format: GPUTextureFormat,
+    premultiplied: GPURenderPipeline | null,
+    private readonly transparent: boolean,
   ) {
+    this.premultiplied = premultiplied;
     this.targets = new TargetPool(device);
     this.uniforms = uniforms;
     this.sampler = device.createSampler({
@@ -113,13 +139,16 @@ export class PostProcess {
       color: { operation: 'add', srcFactor: 'one', dstFactor: 'one' },
       alpha: { operation: 'add', srcFactor: 'one', dstFactor: 'one' },
     };
-    const [down, downKaris, up, composite] = await Promise.all([
+    const transparent = ctx.transparent ?? false;
+    const [down, downKaris, up, composite, premultiplied] = await Promise.all([
       make('fs_down', HDR_FORMAT),
       make('fs_down_karis', HDR_FORMAT),
       make('fs_up', HDR_FORMAT, additive),
       make('fs_composite', format),
+      // Only transparent hosts compile this up front; anyone else asking for it gets it lazily.
+      transparent ? make('fs_composite_premultiplied', format) : null,
     ]);
-    return new PostProcess(device, settings, uniforms, { down, downKaris, up, composite });
+    return new PostProcess(device, settings, uniforms, { down, downKaris, up, composite }, module, format, premultiplied, transparent);
   }
 
   /** The HDR scene target for this frame size (premultiplied rgba16float). */
@@ -136,6 +165,7 @@ export class PostProcess {
     const raw = opts.raw ?? false;
     const input = opts.source ?? scene.texture;
     const doBloom = !raw && s.bloom > 0;
+    const premultiplied = (opts.output ?? (this.transparent ? 'premultiplied' : 'opaque')) === 'premultiplied';
 
     // Bloom pyramid: level i is (1/2)^(i+1) of full resolution.
     const levels: Target[] = [];
@@ -159,6 +189,7 @@ export class PostProcess {
       .set('aspect', scene.width / scene.height)
       .set('raw', raw ? 1 : 0)
       .set('background', opts.background ?? [0, 0, 0])
+      .set('alphaMode', opts.alphaBlend === 'coverage' ? 0 : 1)
       .upload();
 
     if (levels.length > 0) {
@@ -171,7 +202,18 @@ export class PostProcess {
       }
     }
 
-    this.fullscreen(encoder, this.pipelines.composite, input, output, 'clear', levels[0]?.texture ?? this.black);
+    const composite = premultiplied ? this.premultipliedPipeline() : this.pipelines.composite;
+    this.fullscreen(encoder, composite, input, output, 'clear', levels[0]?.texture ?? this.black);
+  }
+
+  private premultipliedPipeline(): GPURenderPipeline {
+    this.premultiplied ??= this.device.createRenderPipeline({
+      label: 'post:fs_composite_premultiplied',
+      layout: 'auto',
+      vertex: { module: this.module, entryPoint: 'vs_fullscreen' },
+      fragment: { module: this.module, entryPoint: 'fs_composite_premultiplied', targets: [{ format: this.format }] },
+    });
+    return this.premultiplied;
   }
 
   private fullscreen(
@@ -232,12 +274,16 @@ const POST_UNIFORMS = {
   aspect: 'f32',
   raw: 'u32',
   background: 'vec3f',
+  /** Premultiplied output only: 0 = coverage, 1 = linear-light alpha. */
+  alphaMode: 'u32',
 } as const;
 
 export interface PostContext {
   device: GPUDevice;
   format: GPUTextureFormat;
   params?: ParamSink;
+  /** The output is a transparent (premultiplied-alpha) canvas: `render()` defaults to premultiplied output. */
+  transparent?: boolean;
 }
 
 function addParams(ctx: PostContext, d: PostDefaults) {
