@@ -39,11 +39,17 @@ In `npm run dev`, editing an experiment or any shader it uses hot-swaps it in pl
 
 ## Embed an experiment
 
-`src/lib` runs one experiment on a canvas you own, with no gallery or panel:
+The package is published as `@mk7s/lighttemple`:
+
+```sh
+npm install @mk7s/lighttemple
+```
+
+`mountExperiment` runs one experiment on a canvas you own, with no gallery or panel:
 
 ```ts
-import { mountExperiment } from './src/lib';
-import factory from './src/experiments/pointer-light-2d';
+import { mountExperiment } from '@mk7s/lighttemple';
+import factory from '@mk7s/lighttemple/effects/pointer-light-2d';
 
 const handle = await mountExperiment(document.querySelector('canvas')!, factory);
 handle.params.groups; // the parameter groups the experiment declared
@@ -51,11 +57,13 @@ handle.pause();
 handle.dispose();
 ```
 
+`createTargetExperiment` renders into a target your host owns — a HoloGPU
+`render(frame, encoder, target)`, say — so an experiment can run as a hologpu
+`EffectDefinition` (see [ADR-020](https://github.com/s4njee/hologpu/blob/main/docs/adr/020-one-effect-contract.md)).
+
 Parameters are declared through a headless `ParamSink` (`HeadlessParams` in the library,
 `ParamsPanel` in the gallery), so an experiment always records its schema and reads live values
-without needing any DOM. Adapting an experiment to the shared `@mk7s/hologpu` contract
-(ADR-020) additionally needs experiments to render into a caller-supplied target; today each
-`frame()` owns the canvas swapchain.
+without needing any DOM. Both entries ship with types.
 
 
 Every parameter change is mirrored into the URL (`#/x/shadow-map-pcf?mode=1&bloom=0.15`), so any state is a shareable link.

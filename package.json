@@ -1,12 +1,41 @@
 {
-  "name": "lighttemple",
-  "private": true,
+  "name": "@mk7s/lighttemple",
   "version": "0.1.0",
   "description": "An experimental WebGPU gallery of practical lighting & shadow effects for aesthetic websites.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/s4njee/lighttemple.git"
+  },
+  "homepage": "https://github.com/s4njee/lighttemple",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "sideEffects": false,
+  "files": [
+    "lib",
+    "types"
+  ],
+  "exports": {
+    ".": {
+      "types": "./types/lib/index.d.ts",
+      "import": "./lib/index.js"
+    },
+    "./effects/*": {
+      "types": "./types/experiments/*/index.d.ts",
+      "import": "./lib/effects/*/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "clean:types": "node -e \"require('node:fs').rmSync('types', { recursive: true, force: true })\"",
+    "build:lib": "vite build --config vite.lib.config.ts && npm run clean:types && tsc -p tsconfig.lib.json && node scripts/rewrite-dts.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "vite build && node scripts/smoke.mjs",
@@ -21,11 +50,5 @@
     "playwright-core": "1.56.1",
     "typescript": "5.9.3",
     "vite": "7.3.7"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/s4njee/lighttemple.git"
-  },
-  "homepage": "https://github.com/s4njee/lighttemple"
+  }
 }
