@@ -1,0 +1,154 @@
+{
+  "project": "lighttemple",
+  "experiments": [
+    {
+      "id": "pointer-light-2d",
+      "title": "Pointer Light",
+      "summary": "A cursor-following area light casting soft, finite shadows from extruded 2D shapes.",
+      "tags": [
+        "sdf",
+        "soft shadows",
+        "pointer",
+        "text",
+        "fullscreen"
+      ],
+      "category": "Interface lighting",
+      "background": "radial-gradient(circle at 62% 38%, #ffe2bd 0%, #c9b9a5 22%, #6c625a 58%, #2a2623 100%)",
+      "status": "research"
+    },
+    {
+      "id": "shadow-map-pcf",
+      "title": "Sun & Soft Shadows",
+      "summary": "Directional shadow mapping with hard, PCF, Poisson and contact-hardening PCSS filters side by side.",
+      "tags": [
+        "shadow map",
+        "pcf",
+        "pcss",
+        "3d",
+        "msaa"
+      ],
+      "category": "Shadows",
+      "background": "linear-gradient(160deg, #c9c5bf 0%, #b9b1a7 45%, #7d7268 46%, #a79c90 70%, #d6cfc6 100%)",
+      "status": "research"
+    },
+    {
+      "id": "studio-ibl",
+      "title": "Studio Lighting",
+      "summary": "A glTF product shot lit only by its environment, with a soft shadow catcher that melts into the page.",
+      "tags": [
+        "ibl",
+        "pbr",
+        "gltf",
+        "shadow catcher",
+        "hdr"
+      ],
+      "category": "Global illumination",
+      "background": "radial-gradient(ellipse at 50% 35%, #fff3e0 0%, #9c8b78 30%, #2b2622 70%, #141210 100%)",
+      "status": "research"
+    },
+    {
+      "id": "embossed-card",
+      "title": "Embossed Card",
+      "summary": "A letterpress, embossed or foil-stamped business card on paper, steel or leather, raked by your cursor.",
+      "tags": [
+        "parallax occlusion",
+        "normal mapping",
+        "procedural materials",
+        "foil",
+        "pointer"
+      ],
+      "category": "Interface lighting",
+      "background": "radial-gradient(ellipse at 40% 40%, #f4efe6 0%, #d9d0c2 30%, #4a372b 62%, #22180f 100%)",
+      "status": "research"
+    },
+    {
+      "id": "holo-card",
+      "title": "Holographic Card",
+      "summary": "A foil trading card that tilts toward your cursor (or phone): diffraction rainbows, thin-film colour and brushed highlights.",
+      "tags": [
+        "iridescence",
+        "diffraction",
+        "thin film",
+        "anisotropic",
+        "gyro"
+      ],
+      "category": "Interface lighting",
+      "background": "conic-gradient(from 210deg at 55% 45%, #ff7ab8, #ffd36e, #7affc8, #6ec3ff, #b98bff, #ff7ab8)",
+      "status": "research"
+    },
+    {
+      "id": "glass-panels",
+      "title": "Glass Panels",
+      "summary": "Draggable frosted-glass UI cards: refraction at the bevels, real blur, colour fringing and rim light from your cursor.",
+      "tags": [
+        "glassmorphism",
+        "refraction",
+        "dispersion",
+        "blur",
+        "drag"
+      ],
+      "category": "Interface lighting",
+      "background": "radial-gradient(circle at 30% 40%, #ff8a3d 0%, transparent 45%), radial-gradient(circle at 75% 35%, #d83cc0 0%, transparent 40%), radial-gradient(circle at 55% 80%, #2a7dff 0%, transparent 45%), #0b0b18",
+      "status": "research"
+    },
+    {
+      "id": "radiance-cascades",
+      "title": "Radiance Cascades",
+      "summary": "Paint lights and walls and watch real-time 2D global illumination: soft shadows, colour bleeding and light leaking through gaps.",
+      "tags": [
+        "global illumination",
+        "radiance cascades",
+        "jump flood",
+        "compute",
+        "paint"
+      ],
+      "category": "Interface lighting",
+      "background": "radial-gradient(circle at 25% 35%, #ffb36b 0%, transparent 30%), radial-gradient(circle at 75% 30%, #4cc3ff 0%, transparent 28%), radial-gradient(circle at 50% 85%, #ff4fc8 0%, transparent 30%), #0a0b10",
+      "status": "research"
+    },
+    {
+      "id": "long-shadows",
+      "title": "Long Shadows",
+      "summary": "Flat-design long shadows for icons and type, cast in real time from your cursor using SDF sweeps.",
+      "tags": [
+        "flat design",
+        "sdf sweep",
+        "text",
+        "pointer"
+      ],
+      "category": "Interface lighting",
+      "background": "linear-gradient(135deg, #f4a259 0%, #f4a259 48%, #c97d42 48%, #c97d42 100%)",
+      "status": "research"
+    },
+    {
+      "id": "neon-sign",
+      "title": "Neon Sign",
+      "summary": "A flickering neon sign from any text: glass tubes, white-hot cores and coloured light spilling across brick.",
+      "tags": [
+        "emissive",
+        "bloom",
+        "flicker",
+        "text",
+        "light spill"
+      ],
+      "category": "Interface lighting",
+      "background": "radial-gradient(ellipse at 45% 50%, #ff3d8b 0%, #5a1030 30%, #170a10 65%), #0e0b0d",
+      "status": "research"
+    },
+    {
+      "id": "lit-type",
+      "title": "Lit Typography",
+      "summary": "A real, editable HTML heading rendered as lit 3D extruded letters, with per-letter metals and shadows from your cursor.",
+      "tags": [
+        "text",
+        "ray marching",
+        "dom",
+        "oblique projection",
+        "ibl"
+      ],
+      "category": "Interface lighting",
+      "background": "linear-gradient(160deg, #e2d9cc 0%, #d0c4b3 55%, #b89c6a 56%, #e9c27a 70%, #c9b49a 100%)",
+      "status": "research"
+    }
+  ]
+}

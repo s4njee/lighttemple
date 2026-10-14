@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "vite build && node scripts/smoke.mjs",
-    "new": "node scripts/new-experiment.mjs"
+    "new": "node scripts/new-experiment.mjs",
+    "catalogue": "node scripts/catalogue.mjs"
   },
   "dependencies": {
     "wgpu-matrix": "3.4.2"
