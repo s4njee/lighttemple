@@ -263,6 +263,91 @@
       "category": "Shadows",
       "background": "radial-gradient(ellipse 20% 8% at 42% 74%, rgba(60, 50, 45, 0.5) 0%, rgba(60, 50, 45, 0) 100%), radial-gradient(circle at 38% 52%, #9b8ec4 0 13%, rgba(155, 142, 196, 0) 13.5%), radial-gradient(ellipse 14% 6% at 72% 80%, rgba(60, 50, 45, 0.35) 0%, rgba(60, 50, 45, 0) 100%), radial-gradient(circle at 70% 36%, #e85d75 0 8%, rgba(232, 93, 117, 0) 8.5%), linear-gradient(180deg, #ddd4c7 0%, #d2c8ba 100%)",
       "status": "research"
+    },
+    {
+      "id": "gtao",
+      "title": "Ground-Truth AO",
+      "summary": "A gallery corner lit only by its environment: horizon-based AO with bent normals, half resolution, accumulated over frames.",
+      "tags": [
+        "ambient occlusion",
+        "gtao",
+        "ssao",
+        "bent normals",
+        "ibl",
+        "temporal",
+        "half-res",
+        "3d"
+      ],
+      "category": "Global illumination",
+      "background": "radial-gradient(ellipse 26% 9% at 46% 76%, rgba(74, 64, 54, 0.45) 0%, rgba(74, 64, 54, 0) 100%), radial-gradient(circle at 46% 58%, #c4673f 0 11%, rgba(196, 103, 63, 0) 11.5%), linear-gradient(180deg, #dcd6cd 0%, #e4ded4 54%, #c9c1b5 55%, #d9d1c5 100%)",
+      "status": "research"
+    },
+    {
+      "id": "ssil",
+      "title": "Screen-Space GI",
+      "summary": "Sun through a window, bouncing off an orange rug and a red wall: one bounce of screen-space indirect light with a visibility bitmask.",
+      "tags": [
+        "global illumination",
+        "ssil",
+        "visibility bitmask",
+        "indirect light",
+        "temporal",
+        "half-res",
+        "3d"
+      ],
+      "category": "Global illumination",
+      "background": "radial-gradient(ellipse 34% 14% at 42% 80%, #e08a3c 0%, rgba(224, 138, 60, 0) 100%), radial-gradient(ellipse 30% 22% at 46% 18%, rgba(150, 104, 70, 0.55) 0%, rgba(150, 104, 70, 0) 100%), linear-gradient(90deg, #5c1913 0%, #2c231d 20%, #3b2f27 50%, #2c231d 80%, #cfd9e8 86%, #1f3b29 100%)",
+      "status": "research"
+    },
+    {
+      "id": "area-lights-ltc",
+      "title": "Area Lights",
+      "summary": "Soft-box product shot with analytic rectangle and disc lights (linearly transformed cosines), against point lights and a Monte Carlo reference.",
+      "tags": [
+        "ltc",
+        "area lights",
+        "soft box",
+        "pbr",
+        "product shot",
+        "3d",
+        "msaa",
+        "monte carlo"
+      ],
+      "category": "Global illumination",
+      "background": "linear-gradient(100deg, transparent 82%, #eef3ff 82.5%, #eef3ff 86%, transparent 86.5%), radial-gradient(ellipse at 45% 62%, #c9c4be 0%, #8a857f 28%, #3b3836 62%, #1d1c1e 100%)",
+      "status": "research"
+    },
+    {
+      "id": "sh-probes",
+      "title": "Irradiance Probes",
+      "summary": "A sunlit room lit by a grid of spherical-harmonic probes, ray-traced on the GPU at load: red bounce, skylight and lamp glow, with DDGI-style leak control.",
+      "tags": [
+        "spherical harmonics",
+        "irradiance probes",
+        "ddgi",
+        "compute",
+        "baking",
+        "bounce light"
+      ],
+      "category": "Global illumination",
+      "background": "radial-gradient(ellipse 22% 9% at 46% 72%, #b8343a 0 70%, rgba(184, 52, 58, 0) 73%), radial-gradient(circle at 46% 64%, rgba(255, 170, 150, 0.5) 0%, rgba(255, 170, 150, 0) 42%), linear-gradient(90deg, rgba(0, 0, 0, 0) 16%, #b9d0a8 16% 30%, rgba(0, 0, 0, 0) 30%), linear-gradient(180deg, #1b1917 0 14%, #dcc6ae 14% 60%, #a57c58 60%, #6e4f37 100%)",
+      "status": "research"
+    },
+    {
+      "id": "reflective-shadow-maps",
+      "title": "Reflective Shadow Maps",
+      "summary": "Sunlight on a red rug bounces onto the walls: one bounce of colour bleeding gathered from the shadow map itself, at quarter resolution.",
+      "tags": [
+        "reflective shadow maps",
+        "one bounce",
+        "colour bleeding",
+        "bilateral upsampling",
+        "taa",
+        "bounce light"
+      ],
+      "category": "Global illumination",
+      "background": "radial-gradient(ellipse 20% 8% at 44% 72%, #c23a3d 0 70%, rgba(194, 58, 61, 0) 73%), radial-gradient(ellipse 30% 40% at 44% 55%, rgba(236, 140, 130, 0.55) 0%, rgba(236, 140, 130, 0) 70%), linear-gradient(90deg, rgba(0, 0, 0, 0) 14%, #c3d6b4 14% 28%, rgba(0, 0, 0, 0) 28%), linear-gradient(180deg, #1b1917 0 14%, #d6cfc6 14% 60%, #8f7458 60%, #5e4a38 100%)",
+      "status": "research"
     }
   ]
 }
