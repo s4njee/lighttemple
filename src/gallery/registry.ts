@@ -194,12 +194,20 @@ export const experiments: ExperimentMeta[] = [
   {
     slug: 'cascaded-shadows',
     title: 'Cascaded Shadows',
-    summary: 'TODO: one-line pitch.',
+    summary: 'A low sun over a wooded valley: cascaded shadow maps keep shadows crisp at your feet and still there on the far hills.',
     epic: 'shadows',
-    tags: [],
+    tags: ['cascaded shadow maps', 'csm', 'terrain', 'instancing', '3d'],
     status: 'prototype',
-    cardBackground: 'radial-gradient(circle at 50% 45%, #ffe2bd 0%, #6c625a 60%, #2a2623 100%)',
-    notes: ['TODO: how it works, what it costs, when to use it.'],
+    cardBackground:
+      'linear-gradient(172deg, #ece0d0 0%, #e2c9a8 33%, #b3a48a 34%, #8f8c52 52%, #6d7236 70%, #4d5328 100%)',
+    notes: [
+      'One shadow map cannot cover a landscape. Spread 1024 texels over 300 m and each one is 30 cm wide: fine on the far hills, mush at the camera, where the screen spends most of its pixels. Cascaded shadow maps cut the view depth into slices and give each its own orthographic map, one layer of a depth texture array. Near slices are small, so their texels are a few centimetres; far slices are huge but far away. Split positions use the "practical" scheme, a blend of uniform and logarithmic splits set by λ. Pick "1 (single map)" to see what the same memory looks like without cascades.',
+      'Stability matters more than sharpness. Each slice is fitted with its bounding sphere, whose size does not change when the camera turns, and the frustum is snapped to whole texels in a light space anchored to the world, so as the camera moves the map slides in texel steps and edges stay still. Turn off "Stabilise" for the tight box fit: slightly sharper, but every edge crawls (try the fly-through). Each frustum is also stretched back toward the sun until it contains every caster, so a hill behind the camera can still shadow the valley. Depth is 32-bit float, so the long range costs no precision.',
+      'Each pixel picks its cascade by distance along the view axis. In a band at the far end of each cascade it blends into the next: "Lerp" samples both (two lookups in the band), "Dither" picks one per pixel with a rising probability (one lookup, but noise that TAA or grain has to hide). The last cascade fades out instead of stopping at a line. Biases are measured in each cascade\'s own texels, slope-scaled and scaled by the filter radius, so one setting works for all of them. PCF kernels are in texels, so the penumbra widens at every split; the Poisson filter uses a world-space radius and keeps it constant until a cascade\'s texels are bigger than the radius.',
+      'Cost: one depth pass per cascade plus the main pass. The terrain and the instanced trees, rocks and poles are split into an 8×8 grid of chunks; every pass culls chunks against its own frustum and merges neighbours into a few instanced draws, so a near cascade draws a small fraction of the half-million triangles. Memory is cascades × size² × 4 bytes (16 MB for four 1024² maps). Shading costs one filtered lookup per pixel (9 bilinear compare taps for PCF 3×3), twice in the blend bands. For phones: three cascades, 1024² or smaller, low scene detail.',
+      'Failure modes: resolution is wasted when the first cascade covers ground the camera never sees (raise λ, or move the camera down); sphere fitting spends some texels on empty corners; snapping only helps camera motion, so a moving sun still shimmers; and nothing casts beyond the shadow distance. Debug views colour the cascades, show raw visibility, draw each shadow-map texel as a checker, and show the maps themselves. "Freeze cascades" stops refitting so you can orbit out and see where they land.',
+      'The valley is procedural: a heightfield with fine cells near the middle and coarse ones at the rim, about 6,500 instanced low-poly props, aerial haze, and a horizon that dissolves into the page colour after tonemapping, so the scene can sit inside a flat-coloured hero section.',
+    ],
     load: () => import('../experiments/cascaded-shadows'),
   },
   {
