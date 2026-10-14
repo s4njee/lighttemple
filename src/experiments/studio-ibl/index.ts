@@ -11,7 +11,7 @@ import { parseHdr } from '../../ibl/hdr';
 import { Ibl, iblWgsl } from '../../ibl/ibl';
 import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { OrbitCamera } from '../../scene/orbit-camera';
-import { hexToLinear } from '../../ui/params';
+import { hexToLinear } from '../../gpu/color';
 import type { ExperimentFactory } from '../types';
 import { materialGridGltf } from './material-grid';
 import shaderWgsl from './shader.wgsl?raw';

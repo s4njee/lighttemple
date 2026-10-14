@@ -7,7 +7,7 @@
 
 import type { GpuContext } from '../gpu/context';
 import type { Surface, SurfaceSize } from '../gpu/surface';
-import type { ParamsPanel } from '../ui/params';
+import type { ParamSink } from '../ui/params';
 import type { PointerState } from '../ui/pointer';
 
 export interface ExperimentContext {
@@ -16,7 +16,7 @@ export interface ExperimentContext {
   surface: Surface;
   /** Swapchain format; render final output to `surface.currentTexture()`. */
   format: GPUTextureFormat;
-  params: ParamsPanel;
+  params: ParamSink;
   pointer: Readonly<PointerState>;
   /** The user prefers reduced motion; keep ambient animation subtle or static. */
   reducedMotion: boolean;

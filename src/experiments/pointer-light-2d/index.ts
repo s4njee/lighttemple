@@ -5,7 +5,7 @@ import { createShader, wgsl } from '../../gpu/shader';
 import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { UniformBlock } from '../../gpu/uniforms';
 import { TextSdfGenerator, type TextSdf } from '../../sdf/text-sdf';
-import { hexToLinear } from '../../ui/params';
+import { hexToLinear } from '../../gpu/color';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 

@@ -78,7 +78,7 @@ interface Entry {
 }
 
 /** Parses a URL string into a valid value for `def`, or undefined if it doesn't fit. */
-function parseParam(def: ParamDef, raw: string): unknown {
+export function parseParam(def: ParamDef, raw: string): unknown {
   if ('options' in def) return Object.values(def.options).find((v) => String(v) === raw);
   if ('type' in def && def.type === 'color') return /^[0-9a-f]{6}$/i.test(raw) ? `#${raw.toLowerCase()}` : undefined;
   if ('type' in def && def.type === 'text') return raw.slice(0, def.maxLength ?? 64);
@@ -94,7 +94,14 @@ function formatParam(def: ParamDef, v: unknown): string {
   return String(v);
 }
 
-export class ParamsPanel {
+/** The surface an experiment needs from its parameters: declare groups, buttons and listeners. */
+export interface ParamSink {
+  add<const S extends ParamSchema>(schema: S, title?: string): ParamValues<S>;
+  button(label: string, onClick: () => void): void;
+  onChange(listener: () => void): () => void;
+}
+
+export class ParamsPanel implements ParamSink {
   readonly element: HTMLElement;
   private entries = new Map<string, Entry>();
   private changeListeners = new Set<() => void>();
@@ -251,18 +258,4 @@ export class ParamsPanel {
     this.changeListeners.clear();
     this.element.remove();
   }
-}
-
-export function srgbToLinear(s: number): number {
-  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-}
-
-export function linearToSrgb(c: number): number {
-  return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
-}
-
-/** Parses '#rrggbb' into linear-light RGB (what shaders want for light colours). */
-export function hexToLinear(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16);
-  return [srgbToLinear(((n >> 16) & 255) / 255), srgbToLinear(((n >> 8) & 255) / 255), srgbToLinear((n & 255) / 255)];
 }

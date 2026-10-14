@@ -15,7 +15,7 @@
 
 import commonWgsl from '../shaders/common.wgsl?raw';
 import fullscreenWgsl from '../shaders/fullscreen.wgsl?raw';
-import type { ParamsPanel } from '../ui/params';
+import type { ParamSink } from '../ui/params';
 import { createShader, wgsl } from '../gpu/shader';
 import { TargetPool, type Target } from '../gpu/targets';
 import { UniformBlock } from '../gpu/uniforms';
@@ -237,7 +237,7 @@ const POST_UNIFORMS = {
 export interface PostContext {
   device: GPUDevice;
   format: GPUTextureFormat;
-  params?: ParamsPanel;
+  params?: ParamSink;
 }
 
 function addParams(ctx: PostContext, d: PostDefaults) {

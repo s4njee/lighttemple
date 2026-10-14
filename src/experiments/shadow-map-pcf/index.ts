@@ -10,7 +10,7 @@ import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { TemporalAA } from '../../post/taa';
 import { UniformBlock } from '../../gpu/uniforms';
 import { OrbitCamera } from '../../scene/orbit-camera';
-import { hexToLinear } from '../../ui/params';
+import { hexToLinear } from '../../gpu/color';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 

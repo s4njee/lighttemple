@@ -5,7 +5,7 @@ import { createShader, wgsl } from '../../gpu/shader';
 import { UniformBlock, uniformStruct } from '../../gpu/uniforms';
 import { HDR_FORMAT, PostProcess } from '../../post/post';
 import { JumpFlood } from '../../sdf/jump-flood';
-import { hexToLinear } from '../../ui/params';
+import { hexToLinear } from '../../gpu/color';
 import type { ExperimentFactory } from '../types';
 import shaderWgsl from './shader.wgsl?raw';
 

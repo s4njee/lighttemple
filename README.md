@@ -37,6 +37,27 @@ node scripts/capture.mjs .smoke/caps "#/x/studio-ibl?model=grid"  # screenshot s
 
 In `npm run dev`, editing an experiment or any shader it uses hot-swaps it in place without a page reload.
 
+## Embed an experiment
+
+`src/lib` runs one experiment on a canvas you own, with no gallery or panel:
+
+```ts
+import { mountExperiment } from './src/lib';
+import factory from './src/experiments/pointer-light-2d';
+
+const handle = await mountExperiment(document.querySelector('canvas')!, factory);
+handle.params.groups; // the parameter groups the experiment declared
+handle.pause();
+handle.dispose();
+```
+
+Parameters are declared through a headless `ParamSink` (`HeadlessParams` in the library,
+`ParamsPanel` in the gallery), so an experiment always records its schema and reads live values
+without needing any DOM. Adapting an experiment to the shared `@mk7s/hologpu` contract
+(ADR-020) additionally needs experiments to render into a caller-supplied target; today each
+`frame()` owns the canvas swapchain.
+
+
 Every parameter change is mirrored into the URL (`#/x/shadow-map-pcf?mode=1&bloom=0.15`), so any state is a shareable link.
 
 Requires a WebGPU-capable browser (Chrome/Edge 113+, Safari 26+, Firefox 141+ on Windows).
