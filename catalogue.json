@@ -19,11 +19,14 @@
     {
       "id": "shadow-map-pcf",
       "title": "Sun & Soft Shadows",
-      "summary": "Directional shadow mapping with hard, PCF, Poisson and contact-hardening PCSS filters side by side.",
+      "summary": "Directional shadow mapping compared: hard, PCF, Poisson, PCSS, VSM and EVSM filters, texel-snapped frustum fitting and screen-space contact shadows.",
       "tags": [
         "shadow map",
         "pcf",
         "pcss",
+        "vsm",
+        "evsm",
+        "contact shadows",
         "3d",
         "msaa"
       ],
@@ -148,6 +151,117 @@
       ],
       "category": "Interface lighting",
       "background": "linear-gradient(160deg, #e2d9cc 0%, #d0c4b3 55%, #b89c6a 56%, #e9c27a 70%, #c9b49a 100%)",
+      "status": "research"
+    },
+    {
+      "id": "cascaded-shadows",
+      "title": "Cascaded Shadows",
+      "summary": "A low sun over a wooded valley: cascaded shadow maps keep shadows crisp at your feet and still there on the far hills.",
+      "tags": [
+        "cascaded shadow maps",
+        "csm",
+        "terrain",
+        "instancing",
+        "3d"
+      ],
+      "category": "Shadows",
+      "background": "linear-gradient(172deg, #ece0d0 0%, #e2c9a8 33%, #b3a48a 34%, #8f8c52 52%, #6d7236 70%, #4d5328 100%)",
+      "status": "research"
+    },
+    {
+      "id": "point-light-shadows",
+      "title": "Lantern Room",
+      "summary": "A swinging candle lantern in a cut-away room: omnidirectional cube-map shadows filtered in 3D, with a dual-paraboloid comparison.",
+      "tags": [
+        "cube shadow map",
+        "point light",
+        "dual paraboloid",
+        "pcss",
+        "3d",
+        "msaa"
+      ],
+      "category": "Shadows",
+      "background": "radial-gradient(circle at 48% 42%, #ffd08a 0%, #b8703a 12%, #4a2c1c 45%, #140f0c 100%)",
+      "status": "research"
+    },
+    {
+      "id": "spot-light-gobo",
+      "title": "Spotlight & Gobo",
+      "summary": "A shadow-mapped spotlight projecting a swaying cookie (leaves, blinds or a window) that follows the pointer across a wall.",
+      "tags": [
+        "spot light",
+        "shadow map",
+        "cookie",
+        "gobo",
+        "pcss",
+        "pointer",
+        "3d"
+      ],
+      "category": "Shadows",
+      "background": "radial-gradient(ellipse at 60% 42%, #e8c79a 0%, #9c7c5a 26%, #3b3029 58%, #15110e 100%)",
+      "status": "research"
+    },
+    {
+      "id": "sdf-soft-shadows",
+      "title": "SDF Soft Shadows",
+      "summary": "A ray-marched sculpture garden with cone-traced soft shadows (analytic or baked into a 3D texture), side by side with PCSS.",
+      "tags": [
+        "sdf",
+        "ray marching",
+        "soft shadows",
+        "pcss",
+        "3d texture",
+        "compute",
+        "taa"
+      ],
+      "category": "Shadows",
+      "background": "linear-gradient(165deg, #d6cfc6 0%, #cac2b7 52%, #8a8076 53%, #bdb4a8 76%, #d6cfc6 100%)",
+      "status": "research"
+    },
+    {
+      "id": "shadow-catcher",
+      "title": "Shadow Catcher",
+      "summary": "A 3D object floating over live HTML on a transparent canvas, its soft shadow darkening real text and CSS gradients.",
+      "tags": [
+        "shadow catcher",
+        "transparent canvas",
+        "premultiplied alpha",
+        "pcss",
+        "dom"
+      ],
+      "category": "Shadows",
+      "background": "radial-gradient(ellipse 26% 12% at 44% 72%, rgba(42, 32, 28, 0.42) 0%, rgba(42, 32, 28, 0) 100%), radial-gradient(circle at 60% 42%, #2f6066 0 11%, rgba(47, 96, 102, 0) 11.5%), linear-gradient(140deg, #f6efe5 0%, #efdcc9 45%, #dccbe6 100%)",
+      "status": "research"
+    },
+    {
+      "id": "coloured-shadows",
+      "title": "Coloured Shadows",
+      "summary": "Sunlight through stained glass and tinted acrylic: a transmittance map beside the depth map, compared with stochastic transparency.",
+      "tags": [
+        "shadow map",
+        "transmittance",
+        "stochastic transparency",
+        "stained glass",
+        "taa"
+      ],
+      "category": "Shadows",
+      "background": "radial-gradient(circle at 30% 70%, #d8343a 0 6%, rgba(216, 52, 58, 0) 6.5%), radial-gradient(circle at 41% 74%, #2a52d4 0 6%, rgba(42, 82, 212, 0) 6.5%), radial-gradient(circle at 36% 61%, #f0a020 0 6%, rgba(240, 160, 32, 0) 6.5%), radial-gradient(circle at 25% 58%, #2fa04a 0 5%, rgba(47, 160, 74, 0) 5.5%), linear-gradient(170deg, #f3d8b6 0%, #e6d3bd 42%, #5f6578 43%, #555b6e 100%)",
+      "status": "research"
+    },
+    {
+      "id": "blob-shadows",
+      "title": "Blob & Baked Shadows",
+      "summary": "The cheap end of shadows: soft blob decals and a lightmap baked at load, side by side with a real-time shadow map.",
+      "tags": [
+        "blob shadows",
+        "decals",
+        "lightmap",
+        "baking",
+        "ambient occlusion",
+        "low-end"
+      ],
+      "category": "Shadows",
+      "background": "radial-gradient(ellipse 20% 8% at 42% 74%, rgba(60, 50, 45, 0.5) 0%, rgba(60, 50, 45, 0) 100%), radial-gradient(circle at 38% 52%, #9b8ec4 0 13%, rgba(155, 142, 196, 0) 13.5%), radial-gradient(ellipse 14% 6% at 72% 80%, rgba(60, 50, 45, 0.35) 0%, rgba(60, 50, 45, 0) 100%), radial-gradient(circle at 70% 36%, #e85d75 0 8%, rgba(232, 93, 117, 0) 8.5%), linear-gradient(180deg, #ddd4c7 0%, #d2c8ba 100%)",
       "status": "research"
     }
   ]

@@ -21,8 +21,15 @@ See **[plan.md](./plan.md)** for the roadmap (epics, stories, sequencing).
 | **Long Shadows** (`#/x/long-shadows`) | Flat-design long shadows via exact convex SDF sweeps |
 | **Neon Sign** (`#/x/neon-sign`) | Neon tubes from any text, flicker, emission-pyramid light spill on bump-mapped brick |
 | **Lit Typography** (`#/x/lit-type`) | Editable DOM heading rendered as aligned, ray-marched 3D letters (oblique projection), per-letter metals |
-| **Sun & Soft Shadows** (`#/x/shadow-map-pcf`) | Directional shadow map with hard / PCF / Poisson / PCSS filtering, PBR materials, MSAA or TAA |
+| **Sun & Soft Shadows** (`#/x/shadow-map-pcf`) | Directional shadow map with hard / PCF / Poisson / PCSS / VSM / EVSM filtering, scene- or camera-fitted texel-snapped frustum, screen-space contact shadows, PBR materials, MSAA or TAA |
 | **Studio Lighting** (`#/x/studio-ibl`) | glTF model lit by image-based lighting, soft shadow catcher + contact AO, drag & drop your own `.glb` / `.hdr` |
+| **Cascaded Shadows** (`#/x/cascaded-shadows`) | Wooded valley with 1–4 cascaded shadow maps: practical splits, texel-snapped stable fitting, blended cascades, instanced props with per-cascade culling |
+| **Lantern Room** (`#/x/point-light-shadows`) | Swinging candle lantern in a cut-away room: omnidirectional cube-map shadows with 3D PCF/PCSS, dual-paraboloid comparison |
+| **Spotlight & Gobo** (`#/x/spot-light-gobo`) | Pointer-aimed spot with a perspective shadow map and projected, swaying procedural cookies (leaves, blinds, window) |
+| **SDF Soft Shadows** (`#/x/sdf-soft-shadows`) | Ray-marched sculptures with classic/improved SDF soft shadows, a compute-baked 3D-texture SDF, and a split view against PCSS |
+| **Shadow Catcher** (`#/x/shadow-catcher`) | 3D object over live HTML on a transparent (premultiplied) canvas: PCSS page shadow + contact AO, text stays selectable |
+| **Coloured Shadows** (`#/x/coloured-shadows`) | Stained glass & tinted acrylic: rgba16f transmittance map beside the depth map vs. stochastic transparency (grey / RGB, TAA) |
+| **Blob & Baked Shadows** (`#/x/blob-shadows`) | Blob decals, a ground lightmap baked at load (soft sun + sky AO) and a real-time shadow map, compared with their costs |
 
 ## Getting started
 
@@ -31,6 +38,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + static build to dist/
 npm run smoke      # build, then render every experiment headlessly (SwiftShader WebGPU)
+npm run smoke -- --only shadow-map-pcf,blob-shadows   # just these experiments
 npm run new -- my-effect --title "My Effect" --epic shadows   # scaffold + register an experiment
 node scripts/capture.mjs .smoke/caps "#/x/studio-ibl?model=grid"  # screenshot specific states (after a build)
 ```
@@ -57,6 +65,10 @@ handle.pause();
 handle.dispose();
 ```
 
+Pass `{ transparent: true }` to `mountExperiment` to configure the canvas with
+`alphaMode: 'premultiplied'`: the post chain then writes valid premultiplied alpha, so a shadow
+catcher like `shadow-catcher` darkens the HTML behind the canvas.
+
 `createTargetExperiment` renders into a target your host owns — a HoloGPU
 `render(frame, encoder, target)`, say — so an experiment can run as a hologpu
 `EffectDefinition` (see [ADR-020](https://github.com/s4njee/hologpu/blob/main/docs/adr/020-one-effect-contract.md)).
@@ -82,7 +94,7 @@ src/
   gltf/          minimal glTF 2.0 loader + material shader chunk
   sdf/           jump-flood SDFs from any mask; runtime text -> SDF (with per-letter extents and font metrics)
   shaders/       shared WGSL: colour, noise, SDF primitives, PBR (incl. anisotropic), wave optics, shadow filters
-  scene/         orbit camera
+  scene/         orbit camera, light-frustum fitting (texel-snapped, cascades), prop sets, shape builders
   ui/            params panel, pointer tracker, frame stats
   gallery/       router views, experiment host, registry
   experiments/   one folder per experiment (index.ts + shader.wgsl)
