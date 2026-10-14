@@ -283,8 +283,8 @@ const create: ExperimentFactory = async (ctx) => {
       const reach = h * 1.6;
 
       // Key shadow light = the environment's dominant direction, kept above 15°.
-      let [lx, ly, lz] = ibl.lightDirection();
-      ly = Math.max(ly, 0.26);
+      const [lx, lyRaw, lz] = ibl.lightDirection();
+      const ly = Math.max(lyRaw, 0.26);
       const ldir = vec3.normalize([lx, ly, lz]);
       const center = vec3.fromValues(0, h * 0.5, 0);
       const keyView = mat4.lookAt(vec3.addScaled(center, ldir, 20), center, Math.abs(ldir[1]) > 0.99 ? [0, 0, 1] : [0, 1, 0]);
