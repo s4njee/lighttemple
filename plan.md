@@ -160,7 +160,10 @@ An experiment is **stable** (vs. **prototype**) when it has:
 - [ ] **E4-S3: Irradiance probes / SH lighting** (M). Baked (or compute-baked at load) SH probe grid for soft bounce light in a small room.
 - [ ] **E4-S4: Reflective shadow maps** (M). One-bounce indirect from the sun via RSM sampling; cheap colour bleeding.
 - [ ] **E4-S5: Screen-space GI / SSIL** (L). Visibility-bitmask SSIL or similar, half-res with temporal filtering.
-- [ ] **E4-S6: 3D radiance cascades / voxel GI (stretch)** (XL). Research spike; split before starting.
+- [ ] **E4-S6: 3D radiance cascades / voxel GI (stretch)** (XL). Research spike; split before starting. *Split, and deferred past E4:*
+  - [ ] **E4-S6a: Scene voxelisation** (M). Conservative voxelisation of a small room into a 3D texture (albedo, emission, opacity) by a compute or triple-axis raster pass, re-run only when the scene changes; a slice/raymarch debug view.
+  - [ ] **E4-S6b: Voxel cone-traced diffuse GI** (M). Mip the voxel volume (anisotropic or isotropic) and cone-trace a handful of diffuse cones per pixel at half resolution, temporally accumulated with E1-S3; compare against the SH probes of E4-S3.
+  - [ ] **E4-S6c: 3D radiance cascades** (L). Probe cascades in world space (spacing ×2, rays ×4 per level) traced through the voxel volume and merged top-down, as the 3D sibling of E2-S6; compare quality, memory and cost with S6b.
 
 ### E5: Volumetrics & atmosphere
 
